@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.config import settings
 from app.utils.database import init_db
-from app.api import auth, plans, spots, users, data_collection
+from app.api import auth, plans, spots, users, data_collection, admin, hotels
 import logging
 
 # ロギング設定
@@ -47,6 +47,8 @@ app.include_router(plans.router)
 app.include_router(spots.router)
 app.include_router(users.router)
 app.include_router(data_collection.router)
+app.include_router(admin.router)
+app.include_router(hotels.router)
 
 
 # エラーハンドリング

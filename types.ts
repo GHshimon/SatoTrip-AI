@@ -21,6 +21,8 @@ export interface Spot {
     lat: number;
     lng: number;
   };
+  created_at?: string;  // ISO 8601形式の日時文字列
+  updated_at?: string;  // ISO 8601形式の日時文字列
 }
 
 export interface PlanSpot {
@@ -83,4 +85,52 @@ export interface PlanRequest {
   days: number;
   budget: string;
   themes: string[];
+  checkInDate?: string;
+  checkOutDate?: string;
+  numGuests?: number;
+}
+
+export interface HotelCategory {
+  name: string;
+  description: string;
+  icon: string;
+}
+
+export interface HotelSearchLink {
+  name: string;
+  area: string;
+  link: string;
+  type: string;
+  affiliate: string;
+  description: string;
+  error?: string;
+}
+
+export interface HotelSearchRequest {
+  area: string;
+  category?: string;
+  hotelName?: string;
+  checkIn?: string;
+  checkOut?: string;
+  numGuests?: number;
+}
+
+export interface HotelSearchResult {
+  area: string;
+  category?: string;
+  hotel_name?: string;
+  check_in?: string;
+  check_out?: string;
+  num_guests: number;
+  search_query: string;
+  links: {
+    rakuten: HotelSearchLink;
+    yahoo: HotelSearchLink;
+    jalan: HotelSearchLink;
+  };
+  errors?: Array<{
+    site: string;
+    affiliate: string;
+    error: string;
+  }>;
 }

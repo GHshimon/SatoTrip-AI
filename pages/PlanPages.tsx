@@ -1,9 +1,27 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Plan, PlanSpot, PlanRequest, Spot } from '../types';
+import { Plan, PlanSpot, PlanRequest, Spot, HotelCategory, HotelSearchRequest, HotelSearchResult } from '../types';
 import { plans, spots } from '../mockData';
 import { AppConfig } from '../config';
 import * as planApi from '../src/api/plans';
+import * as hotelApi from '../src/api/hotels';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 // 47 Prefectures Data grouped by Region
 const regions = [
@@ -89,6 +107,146 @@ const getSimulatedLocation = (area: string): { lat: number; lng: number } => {
 };
 
 // generateAiPlan関数は削除 - バックエンドAPIを使用
+
+// SortableSpotItemコンポーネント
+interface SortableSpotItemProps {
+  spot: PlanSpot;
+  index: number;
+  isEditMode: boolean;
+  currentColor: { text: string; border: string; bg: string; ring: string };
+  editedSpots: Record<string, { durationMinutes?: number; transportDuration?: number }>;
+  handleSpotEdit: (spotId: string, field: 'durationMinutes' | 'transportDuration', value: number) => void;
+  calculateEndTime: (startTime: string, durationMinutes: number) => string;
+  transportModes: Record<string, 'public' | 'car' | 'walk'>;
+  handleModeChange: (id: string, mode: 'public' | 'car' | 'walk') => void;
+  calculateDuration: (baseMode: string | undefined, baseDuration: number | undefined, targetMode: string) => number;
+  totalSpots: number;
+}
+
+const SortableSpotItem: React.FC<SortableSpotItemProps> = ({
+  spot,
+  index,
+  isEditMode,
+  currentColor,
+  editedSpots,
+  handleSpotEdit,
+  calculateEndTime,
+  transportModes,
+  handleModeChange,
+  calculateDuration,
+  totalSpots,
+}) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: spot.id, disabled: !isEditMode });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} className={isDragging ? 'z-50' : ''}>
+      <React.Fragment>
+        <div className="relative flex items-start gap-4">
+          {/* ドラッグハンドル（編集モード時のみ） */}
+          {isEditMode && (
+            <div
+              {...attributes}
+              {...listeners}
+              className="cursor-move text-gray-400 hover:text-gray-600 mt-2"
+              title="ドラッグして順番を変更"
+            >
+              <span className="material-symbols-outlined text-2xl">drag_handle</span>
+            </div>
+          )}
+          {/* Dynamic Colored Icon */}
+          <div className={`absolute -left-[4.5rem] w-12 h-12 rounded-full bg-white border-4 flex items-center justify-center shadow-sm z-10 transition-colors ${currentColor.border} ${currentColor.text}`}>
+            <span className="material-symbols-outlined">{spot.spot.category === 'Food' ? 'restaurant' : spot.spot.category === 'Shopping' ? 'shopping_bag' : 'palette'}</span>
+          </div>
+          <div className="flex-1 pt-1 group">
+            {isEditMode ? (
+              <div className="space-y-2 mb-2">
+                <div className="flex items-center gap-2">
+                  <label className="text-text-muted text-xs font-medium w-20">滞在時間:</label>
+                  <input
+                    type="number"
+                    min="5"
+                    max="480"
+                    value={editedSpots[spot.id]?.durationMinutes ?? spot.spot.durationMinutes ?? 60}
+                    onChange={(e) => handleSpotEdit(spot.id, 'durationMinutes', parseInt(e.target.value) || 60)}
+                    className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
+                  />
+                  <span className="text-text-muted text-xs">分</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-text-muted text-xs font-medium w-20">移動時間:</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="300"
+                    value={editedSpots[spot.id]?.transportDuration ?? spot.transportDuration ?? 20}
+                    onChange={(e) => handleSpotEdit(spot.id, 'transportDuration', parseInt(e.target.value) || 0)}
+                    className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
+                  />
+                  <span className="text-text-muted text-xs">分</span>
+                </div>
+                <p className="text-text-muted text-xs">
+                  開始: {spot.startTime} - 終了: {calculateEndTime(spot.startTime || '09:00', editedSpots[spot.id]?.durationMinutes ?? spot.spot.durationMinutes ?? 60)}
+                </p>
+              </div>
+            ) : (
+              <p className="text-text-muted font-medium text-sm mb-1">
+                {spot.startTime} - {calculateEndTime(spot.startTime || '09:00', spot.spot.durationMinutes || 60)}
+                {' '}
+                <span className="text-xs">(滞在: {spot.spot.durationMinutes || 60}分)</span>
+              </p>
+            )}
+            <h3 className="text-xl font-bold mb-1 flex items-center gap-2">
+              {spot.spot.name}
+              {spot.isMustVisit && (
+                <span className="bg-primary text-white text-[10px] px-2 py-0.5 rounded-full font-bold shadow-sm animate-pulse flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[12px]">check</span> MUST
+                </span>
+              )}
+            </h3>
+            <p className="text-text-muted text-sm mb-2 line-clamp-2">{spot.spot.description}</p>
+            {/* SNS Tag Display */}
+            <div className="flex gap-2 flex-wrap">
+              {spot.spot.tags && spot.spot.tags.length > 0 ? (
+                spot.spot.tags.map((tag, i) => (
+                  <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 bg-gradient-to-r from-pink-500 to-purple-500 text-white text-[10px] rounded-full font-bold shadow-sm">
+                    <span className="material-symbols-outlined text-[10px]">trending_up</span> {tag}
+                  </span>
+                ))
+              ) : (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 text-text-muted text-[10px] rounded-full font-bold">
+                  4.8 <span className="material-symbols-outlined text-[10px] text-yellow-500 fill">star</span>
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="w-20 h-20 rounded-lg overflow-hidden shadow-sm flex-shrink-0 hidden sm:block">
+            <img src={spot.spot.image} alt="" className="w-full h-full object-cover" />
+          </div>
+        </div>
+        {spot.transportMode && index < totalSpots - 1 && (
+          <TransportLine 
+            mode={transportModes[spot.id] || 'public'} 
+            duration={spot.transportDuration || calculateDuration(spot.transportMode, spot.transportDuration, transportModes[spot.id] || 'public')}
+            onModeChange={(m) => handleModeChange(spot.id, m)} 
+          />
+        )}
+      </React.Fragment>
+    </div>
+  );
+};
 
 // Helper to display transport
 const TransportLine: React.FC<{ 
@@ -212,11 +370,15 @@ const LeafletMap: React.FC<{ planSpots: PlanSpot[], areaName: string, selectedDa
            opacity: opacity,
            zIndexOffset: zIndexOffset
          }).bindPopup(`
-           <div class="text-center">
-             <strong class="text-sm text-gray-500">${ps.day}日目</strong><br/>
-             <b class="text-lg">${ps.spot.name}</b><br/>
-             <span class="text-xs text-gray-500">${ps.spot.category}</span>
-             ${ps.isMustVisit ? '<br/><span class="text-red-500 font-bold">★ MUST</span>' : ''}
+           <div class="text-center p-2" style="min-width: 200px;">
+             <strong class="text-sm text-gray-500">${ps.day}日目</strong>
+             ${ps.startTime ? `<br/><span class="text-xs text-gray-400">🕐 ${ps.startTime}</span>` : ''}
+             <br/><b class="text-lg">${ps.spot.name}</b>
+             ${ps.spot.area ? `<br/><span class="text-xs text-gray-500">📍 ${ps.spot.area}</span>` : ''}
+             <br/><span class="text-xs text-gray-500">${ps.spot.category}</span>
+             ${ps.note ? `<br/><p class="text-xs text-gray-600 mt-1">${ps.note}</p>` : ''}
+             ${ps.spot.description ? `<br/><p class="text-xs text-gray-500 mt-1">${ps.spot.description.substring(0, 100)}${ps.spot.description.length > 100 ? '...' : ''}</p>` : ''}
+             ${ps.isMustVisit ? '<br/><span class="text-red-500 font-bold">★ MUST VISIT</span>' : ''}
            </div>
          `);
          
@@ -243,37 +405,111 @@ const LeafletMap: React.FC<{ planSpots: PlanSpot[], areaName: string, selectedDa
              // Prepare coordinates string for OSRM: lon,lat;lon,lat
              const coordsString = locations.map(l => `${l.lng},${l.lat}`).join(';');
              let routeLatlngs = locations.map(l => [l.lat, l.lng]); // Fallback: Straight lines
+             let routeInfo: { distance?: number; duration?: number } = {};
 
              try {
-                // Fetch driving route from OSRM demo server
-                const response = await fetch(`https://router.project-osrm.org/route/v1/driving/${coordsString}?overview=full&geometries=geojson`);
+                // Fetch driving route from OSRM demo server with timeout
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 5000); // 5秒タイムアウト
+                
+                const response = await fetch(
+                  `https://router.project-osrm.org/route/v1/driving/${coordsString}?overview=full&geometries=geojson`,
+                  { signal: controller.signal }
+                );
+                
+                clearTimeout(timeoutId);
+                
+                if (!response.ok) {
+                  throw new Error(`OSRM request failed: ${response.status}`);
+                }
+                
                 const data = await response.json();
                 
                 if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
                     // OSRM returns [lon, lat], Leaflet needs [lat, lon]
                     routeLatlngs = data.routes[0].geometry.coordinates.map((c: number[]) => [c[1], c[0]]);
+                    // ルート情報を取得（距離と時間）
+                    const route = data.routes[0];
+                    if (route.legs && route.legs.length > 0) {
+                      routeInfo.distance = route.legs.reduce((sum: number, leg: any) => sum + (leg.distance || 0), 0) / 1000; // km
+                      routeInfo.duration = route.legs.reduce((sum: number, leg: any) => sum + (leg.duration || 0), 0) / 60; // minutes
+                    }
+                } else {
+                    throw new Error('No route found in OSRM response');
                 }
              } catch (e) {
-                 console.warn("Routing fetch failed, falling back to straight lines", e);
+                 console.warn("OSRM routing failed, using straight lines", e);
+                 // フォールバック: 直線で結ぶ
+                 routeLatlngs = locations.map(l => [l.lat, l.lng]);
              }
 
              if (!isMounted) return;
              // Ensure layer group still exists
              if (layerGroupRef.current) {
-                const polyline = L.polyline(routeLatlngs as any, {
+                let routeLayer: any;
+                if (isSelected && (window as any).L && (window as any).L.antPath) {
+                  // 選択された日はアニメーション付きAntPath
+                  routeLayer = (window as any).L.antPath(routeLatlngs, {
                     color: colorName,
-                    weight: isSelected ? 5 : 3,
-                    opacity: isSelected ? 0.8 : 0.3,
-                    dashArray: isSelected ? null : '5, 10',
+                    weight: 5,
+                    opacity: 0.8,
+                    dashArray: [10, 20],
+                    pulseColor: colorName,
+                    delay: 400,
+                    paused: false,
+                    reverse: false
+                  });
+                } else {
+                  // 選択されていない日は破線のPolyline
+                  routeLayer = L.polyline(routeLatlngs as any, {
+                    color: colorName,
+                    weight: 3,
+                    opacity: 0.3,
+                    dashArray: '5, 10',
                     lineCap: 'round'
-                });
-                layerGroupRef.current.addLayer(polyline);
+                  });
+                }
+                
+                // ルート情報をポップアップに追加
+                if (routeInfo.distance || routeInfo.duration) {
+                  const routePopup = `
+                    <div style="text-align: center; padding: 5px;">
+                      <strong>${day}日目のルート</strong><br/>
+                      ${routeInfo.distance ? `距離: ${routeInfo.distance.toFixed(1)} km<br/>` : ''}
+                      ${routeInfo.duration ? `時間: ${Math.round(routeInfo.duration)} 分` : ''}
+                    </div>
+                  `;
+                  routeLayer.bindPopup(routePopup);
+                }
+                
+                layerGroupRef.current.addLayer(routeLayer);
              }
            }
         }
     };
 
     drawRoutes();
+
+    // Add Legend
+    const legend = L.control({ position: 'bottomright' });
+    legend.onAdd = function() {
+      const div = L.DomUtil.create('div', 'legend');
+      div.style.cssText = 'background: white; padding: 10px; border-radius: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.2);';
+      div.innerHTML = `
+        <h5 style="margin: 0 0 5px 0; font-weight: bold;">凡例</h5>
+        ${DAY_COLORS.map((color, idx) => {
+          const dayNum = idx + 1;
+          const isSelected = dayNum === selectedDay;
+          return `
+            <p style="margin: 2px 0; ${isSelected ? 'font-weight: bold;' : ''}">
+              <span style="color: ${color}; font-size: 18px;">●</span> ${dayNum}日目
+            </p>
+          `;
+        }).join('')}
+      `;
+      return div;
+    };
+    legend.addTo(map);
 
     // Fit bounds
     if (hasMarkers) {
@@ -296,6 +532,9 @@ const LeafletMap: React.FC<{ planSpots: PlanSpot[], areaName: string, selectedDa
 
     return () => {
         isMounted = false;
+        if (map && legend) {
+          map.removeControl(legend);
+        }
     };
   }, [planSpots, selectedDay, areaName]);
 
@@ -311,7 +550,10 @@ export const CreatePlan: React.FC<{ onNavigate: (path: string) => void }> = ({ o
     destination: '',
     days: 2,
     budget: 'standard',
-    themes: []
+    themes: [],
+    checkInDate: undefined,
+    checkOutDate: undefined,
+    numGuests: 2
   });
   const [pendingSpots, setPendingSpots] = useState<Spot[]>([]);
   const [activeRegion, setActiveRegion] = useState(regions[1].id); // Default to Kanto
@@ -370,6 +612,9 @@ export const CreatePlan: React.FC<{ onNavigate: (path: string) => void }> = ({ o
             tags: spot.tags,
             location: spot.location,
           })),
+          check_in_date: request.checkInDate,
+          check_out_date: request.checkOutDate,
+          num_guests: request.numGuests,
         });
 
         // プラン詳細ページに遷移
@@ -586,6 +831,56 @@ export const CreatePlan: React.FC<{ onNavigate: (path: string) => void }> = ({ o
                 ))}
               </div>
 
+              {/* 宿泊先情報入力セクション */}
+              <div className="mb-8">
+                <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
+                  <span className="material-symbols-outlined text-primary">hotel</span>
+                  宿泊情報（オプション）
+                </h3>
+                <div className="space-y-4 bg-gray-50 p-4 rounded-xl">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block font-bold text-text-muted text-sm mb-2">チェックイン日</label>
+                      <input
+                        type="date"
+                        className="w-full px-4 py-2 bg-white rounded-lg border border-gray-200 focus:border-primary focus:outline-none"
+                        value={request.checkInDate || ''}
+                        onChange={e => setRequest({...request, checkInDate: e.target.value})}
+                        min={new Date().toISOString().split('T')[0]}
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-text-muted text-sm mb-2">チェックアウト日</label>
+                      <input
+                        type="date"
+                        className="w-full px-4 py-2 bg-white rounded-lg border border-gray-200 focus:border-primary focus:outline-none"
+                        value={request.checkOutDate || ''}
+                        onChange={e => setRequest({...request, checkOutDate: e.target.value})}
+                        min={request.checkInDate || new Date().toISOString().split('T')[0]}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block font-bold text-text-muted text-sm mb-2">予約人数</label>
+                    <div className="flex items-center gap-4">
+                      <button 
+                        onClick={() => setRequest({...request, numGuests: Math.max(1, (request.numGuests || 2) - 1)})} 
+                        className="w-10 h-10 rounded-full bg-white border border-gray-200 flex items-center justify-center hover:bg-gray-100 font-bold"
+                      >
+                        -
+                      </button>
+                      <span className="text-lg font-bold w-12 text-center">{request.numGuests || 2}名</span>
+                      <button 
+                        onClick={() => setRequest({...request, numGuests: Math.min(20, (request.numGuests || 2) + 1)})} 
+                        className="w-10 h-10 rounded-full bg-white border border-gray-200 flex items-center justify-center hover:bg-gray-100 font-bold"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <div className="bg-gradient-to-r from-secondary/20 to-primary/10 p-4 rounded-xl mb-8 flex items-start gap-3">
                  <span className="material-symbols-outlined text-primary mt-1">database</span>
                  <div className="text-sm">
@@ -615,6 +910,25 @@ export const PlanDetail: React.FC<{ planId: string; onNavigate: (path: string) =
   const [error, setError] = useState<string | null>(null);
   const [transportModes, setTransportModes] = useState<Record<string, 'public' | 'car' | 'walk'>>({});
   const [selectedDay, setSelectedDay] = useState(1);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editedSpots, setEditedSpots] = useState<Record<string, { durationMinutes?: number; transportDuration?: number }>>({});
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [reorderedSpots, setReorderedSpots] = useState<PlanSpot[]>([]);
+
+  // ドラッグ&ドロップ用のセンサー設定
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+  
+  // 宿泊施設検索関連のstate
+  const [hotelCategories, setHotelCategories] = useState<HotelCategory[]>([]);
+  const [selectedHotelCategory, setSelectedHotelCategory] = useState<string | null>(null);
+  const [hotelName, setHotelName] = useState<string>('');
+  const [hotelSearchResult, setHotelSearchResult] = useState<HotelSearchResult | null>(null);
+  const [isSearchingHotels, setIsSearchingHotels] = useState(false);
 
   useEffect(() => {
     const fetchPlan = async () => {
@@ -650,6 +964,44 @@ export const PlanDetail: React.FC<{ planId: string; onNavigate: (path: string) =
     });
     setTransportModes(initial);
   }, [plan]);
+
+  // 宿泊施設カテゴリを取得
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        const result = await hotelApi.getHotelCategories();
+        setHotelCategories(result.categories);
+      } catch (err) {
+        console.error('Failed to fetch hotel categories:', err);
+      }
+    };
+    fetchCategories();
+  }, []);
+
+  // 宿泊施設検索
+  const handleHotelSearch = async () => {
+    if (!plan) return;
+    
+    setIsSearchingHotels(true);
+    try {
+      const searchRequest: HotelSearchRequest = {
+        area: plan.area,
+        category: selectedHotelCategory || undefined,
+        hotelName: hotelName || undefined,
+        checkIn: undefined, // プラン生成時の日付を使用する場合はここで設定
+        checkOut: undefined,
+        numGuests: 2
+      };
+      
+      const result = await hotelApi.searchHotels(searchRequest);
+      setHotelSearchResult(result);
+    } catch (err: any) {
+      console.error('Failed to search hotels:', err);
+      alert(err.detail || err.message || '宿泊施設の検索に失敗しました');
+    } finally {
+      setIsSearchingHotels(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -730,29 +1082,235 @@ export const PlanDetail: React.FC<{ planId: string; onNavigate: (path: string) =
     downloadAnchorNode.remove();
   };
 
-  // Mock calculation for duration based on mode
-  const calculateDuration = (baseMode: string | undefined, baseDuration: number | undefined, targetMode: string): number => {
-    if (!baseMode || !baseDuration) return 0;
-    if (baseMode === targetMode) return baseDuration;
-    if (targetMode === 'public' && (baseMode === 'train' || baseMode === 'bus')) return baseDuration;
-
-    // Roughly estimate minutes. This is a visual mock.
-    // Base assumption: Walk speed = X. Car = 5X. Train = 3X (varies heavily).
-    
-    // Normalize to 'walk minutes'
-    let walkMinutes = baseDuration;
-    if (baseMode === 'train' || baseMode === 'public') walkMinutes = baseDuration * 3;
-    else if (baseMode === 'car') walkMinutes = baseDuration * 5;
-    
-    // Convert to target
-    if (targetMode === 'walk') return Math.round(walkMinutes);
-    if (targetMode === 'car') return Math.max(5, Math.round(walkMinutes / 5) + 5); // +5 min parking
-    if (targetMode === 'public') return Math.max(10, Math.round(walkMinutes / 3) + 10); // +10 min waiting/walking to station
-
-    return baseDuration;
+  // 編集モードの切り替え
+  const handleEditModeToggle = () => {
+    setIsEditMode(!isEditMode);
+    if (!isEditMode) {
+      // 編集モード開始時、現在の値をeditedSpotsにコピー
+      const initialEdits: Record<string, { durationMinutes?: number; transportDuration?: number }> = {};
+      plan?.spots.forEach(spot => {
+        initialEdits[spot.id] = {
+          durationMinutes: spot.spot.durationMinutes,
+          transportDuration: spot.transportDuration
+        };
+      });
+      setEditedSpots(initialEdits);
+      // 並び替え状態をリセット
+      setReorderedSpots([]);
+    } else {
+      // 編集モード終了時、変更をリセット
+      setEditedSpots({});
+      setReorderedSpots([]);
+    }
   };
 
-  const currentDaySpots = plan.spots.filter(s => s.day === selectedDay);
+  // スポットの編集値を更新
+  const handleSpotEdit = (spotId: string, field: 'durationMinutes' | 'transportDuration', value: number) => {
+    setEditedSpots(prev => ({
+      ...prev,
+      [spotId]: {
+        ...prev[spotId],
+        [field]: value
+      }
+    }));
+  };
+
+  // プラン更新
+  const handlePlanUpdate = async () => {
+    if (!plan) return;
+    
+    setIsUpdating(true);
+    try {
+      // 編集されたスポット情報と並び替え情報を組み合わせ
+      const spotUpdates: Array<{ id: string; startTime?: string; durationMinutes?: number; transportDuration?: number; order?: number }> = [];
+      
+      // 並び替え済みのスポットがある場合はそれを使用、なければ元のプランから
+      const spotsToUpdate = reorderedSpots.length > 0 ? reorderedSpots : plan.spots;
+      
+      spotsToUpdate.forEach((spot, index) => {
+        const edits = editedSpots[spot.id] || {};
+        const update: any = {
+          id: spot.id,
+        };
+        
+        // 編集された情報を追加
+        if (edits.durationMinutes !== undefined) {
+          update.durationMinutes = edits.durationMinutes;
+        }
+        if (edits.transportDuration !== undefined) {
+          update.transportDuration = edits.transportDuration;
+        }
+        
+        // 並び替え情報（startTimeが変更されている場合）
+        if (reorderedSpots.length > 0 && spot.startTime) {
+          update.startTime = spot.startTime;
+        }
+        
+        // 順序情報（日ごと）
+        if (spot.day === selectedDay) {
+          update.order = index;
+        }
+        
+        spotUpdates.push(update);
+      });
+
+      const updatedPlan = await planApi.updatePlan(plan.id, {
+        spots: spotUpdates
+      });
+
+      setPlan(updatedPlan);
+      setIsEditMode(false);
+      setEditedSpots({});
+      setReorderedSpots([]);
+      alert('プランを更新しました');
+    } catch (err: any) {
+      console.error('プラン更新エラー:', err);
+      alert(err.detail || err.message || 'プランの更新に失敗しました');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  // ドラッグ&ドロップ完了時のハンドラー
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    
+    if (!over || active.id === over.id || !plan) return;
+    
+    const currentDaySpots = reorderedSpots.length > 0 
+      ? reorderedSpots.filter(s => s.day === selectedDay)
+      : plan.spots.filter(s => s.day === selectedDay);
+    
+    const oldIndex = currentDaySpots.findIndex(spot => spot.id === active.id);
+    const newIndex = currentDaySpots.findIndex(spot => spot.id === over.id);
+    
+    if (oldIndex !== -1 && newIndex !== -1) {
+      const newOrderedSpots = arrayMove(currentDaySpots, oldIndex, newIndex);
+      
+      // 新しい順序で時刻を再計算
+      const recalculatedSpots = recalculateTimesForDay(newOrderedSpots, selectedDay);
+      
+      // 全体のスポットリストを更新
+      const allSpots = plan.spots.filter(s => s.day !== selectedDay);
+      const updatedAllSpots = [...allSpots, ...recalculatedSpots].sort((a, b) => {
+        if (a.day !== b.day) return a.day - b.day;
+        return a.startTime?.localeCompare(b.startTime || '') || 0;
+      });
+      
+      setReorderedSpots(updatedAllSpots);
+      
+      // 編集されたスポット情報も更新
+      const updatedEditedSpots = { ...editedSpots };
+      recalculatedSpots.forEach(spot => {
+        if (!updatedEditedSpots[spot.id]) {
+          updatedEditedSpots[spot.id] = {};
+        }
+        updatedEditedSpots[spot.id].startTime = spot.startTime;
+      });
+      setEditedSpots(updatedEditedSpots);
+    }
+  };
+
+  // 日ごとの時刻を再計算
+  const recalculateTimesForDay = (spots: PlanSpot[], day: number): PlanSpot[] => {
+    if (spots.length === 0) return spots;
+    
+    const startTime = "09:00"; // デフォルト開始時間
+    const recalculated: PlanSpot[] = [];
+    
+    let currentTime = timeToMinutes(startTime);
+    
+    spots.forEach((spot, index) => {
+      const durationMinutes = editedSpots[spot.id]?.durationMinutes ?? spot.spot.durationMinutes ?? 60;
+      const transportDuration = index === 0 ? 0 : (editedSpots[spots[index - 1].id]?.transportDuration ?? spots[index - 1].transportDuration ?? 20);
+      
+      // 最初のスポット以外は移動時間を加算
+      if (index > 0) {
+        currentTime += transportDuration;
+      }
+      
+      const newSpot = {
+        ...spot,
+        startTime: minutesToTime(currentTime),
+      };
+      
+      recalculated.push(newSpot);
+      
+      // 次のスポットの開始時刻を計算（滞在時間を加算）
+      currentTime += durationMinutes;
+    });
+    
+    return recalculated;
+  };
+
+  // 時刻を分単位に変換
+  const timeToMinutes = (timeStr: string): number => {
+    if (!timeStr) return 0;
+    const [hours, minutes] = timeStr.split(':').map(Number);
+    return hours * 60 + (minutes || 0);
+  };
+
+  // 分を時刻文字列に変換
+  const minutesToTime = (minutes: number): string => {
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
+  };
+
+  // 終了時刻を計算
+  const calculateEndTime = (startTime: string, durationMinutes: number): string => {
+    const startMinutes = timeToMinutes(startTime);
+    const endMinutes = startMinutes + durationMinutes;
+    return minutesToTime(endMinutes);
+  };
+
+  // 移動時間の計算（実際の値を使用、変更時のみ概算）
+  const calculateDuration = (baseMode: string | undefined, baseDuration: number | undefined, targetMode: string): number => {
+    if (!baseMode || baseDuration === undefined) return 0;
+    
+    // 同じ移動手段の場合はそのまま返す
+    if (baseMode === targetMode || (targetMode === 'public' && (baseMode === 'train' || baseMode === 'bus'))) {
+      return baseDuration;
+    }
+
+    // 移動手段が変更された場合のみ概算変換
+    // 実際のルート情報がある場合はそれを使用（baseDurationが実際の値）
+    // 概算が必要な場合のみ変換
+    
+    // 概算の速度比（参考値）
+    // 徒歩: 4km/h, 車: 40km/h, 電車: 30km/h
+    const speedRatios: Record<string, number> = {
+      'walk': 1,
+      'car': 10,
+      'train': 7.5,
+      'bus': 7.5,
+      'public': 7.5
+    };
+    
+    const baseSpeed = speedRatios[baseMode] || 1;
+    const targetSpeed = speedRatios[targetMode] || 1;
+    
+    // 距離を仮定（baseDurationから逆算）
+    // 徒歩基準で計算
+    const walkDistance = baseDuration * (4 / 60); // km
+    const targetDuration = Math.round((walkDistance / (targetSpeed * 4 / 60)) * 60);
+    
+    // 待ち時間や乗り換え時間を考慮
+    if (targetMode === 'car') return Math.max(5, targetDuration + 5); // 駐車時間
+    if (targetMode === 'public') return Math.max(10, targetDuration + 10); // 待ち時間・乗り換え
+    
+    return Math.max(5, targetDuration);
+  };
+
+  // 並び替え済みのスポットがある場合はそれを使用、なければ元のプランから取得
+  const currentDaySpots = reorderedSpots.length > 0 
+    ? reorderedSpots.filter(s => s.day === selectedDay)
+    : plan.spots.filter(s => s.day === selectedDay);
+  
+  // startTimeでソート（念のため）
+  const sortedCurrentDaySpots = [...currentDaySpots].sort((a, b) => {
+    return (a.startTime || '00:00').localeCompare(b.startTime || '00:00');
+  });
 
   // Get color for current day selection
   const currentColor = TAILWIND_COLORS[(selectedDay - 1) % TAILWIND_COLORS.length] || TAILWIND_COLORS[0];
@@ -769,7 +1327,14 @@ export const PlanDetail: React.FC<{ planId: string; onNavigate: (path: string) =
           </div>
           <div className="flex gap-3">
              <button onClick={handleShare} className="w-12 h-12 rounded-full bg-white border border-primary/20 flex items-center justify-center text-primary hover:bg-primary/5 transition-colors" title="シェア"><span className="material-symbols-outlined">share</span></button>
-             <button onClick={() => onNavigate(`/plan/${plan.id}/edit`)} className="w-12 h-12 rounded-full bg-white border border-primary/20 flex items-center justify-center text-primary hover:bg-primary/5 transition-colors" title="編集"><span className="material-symbols-outlined">edit</span></button>
+             <button onClick={handleEditModeToggle} className={`w-12 h-12 rounded-full border flex items-center justify-center transition-colors ${isEditMode ? 'bg-primary text-white border-primary' : 'bg-white border-primary/20 text-primary hover:bg-primary/5'}`} title="編集モード">
+               <span className="material-symbols-outlined">{isEditMode ? 'close' : 'edit'}</span>
+             </button>
+             {isEditMode && (
+               <button onClick={handlePlanUpdate} disabled={isUpdating} className="px-4 h-12 rounded-full bg-primary text-white flex items-center justify-center shadow-lg hover:opacity-90 transition-opacity disabled:opacity-50" title="更新">
+                 {isUpdating ? '更新中...' : '更新'}
+               </button>
+             )}
              <button onClick={handleDownload} className="w-12 h-12 rounded-full bg-primary text-white flex items-center justify-center shadow-lg hover:opacity-90 transition-opacity" title="ダウンロード"><span className="material-symbols-outlined">download</span></button>
           </div>
         </div>
@@ -819,9 +1384,38 @@ export const PlanDetail: React.FC<{ planId: string; onNavigate: (path: string) =
 
             {/* Timeline */}
             <div className={`relative pl-12 border-l-2 ml-6 space-y-8 py-4 transition-colors ${currentColor.border} border-opacity-30`}>
-               {currentDaySpots.length === 0 ? (
+               {sortedCurrentDaySpots.length === 0 ? (
                  <div className="text-text-muted italic">この日のスポットはまだありません。編集モードから追加してください。</div>
-               ) : currentDaySpots.map((pSpot, idx) => (
+               ) : isEditMode ? (
+                 <DndContext
+                   sensors={sensors}
+                   collisionDetection={closestCenter}
+                   onDragEnd={handleDragEnd}
+                 >
+                   <SortableContext
+                     items={sortedCurrentDaySpots.map(s => s.id)}
+                     strategy={verticalListSortingStrategy}
+                   >
+                     {sortedCurrentDaySpots.map((pSpot, idx) => (
+                       <SortableSpotItem
+                         key={pSpot.id}
+                         spot={pSpot}
+                         index={idx}
+                         isEditMode={isEditMode}
+                         currentColor={currentColor}
+                         editedSpots={editedSpots}
+                         handleSpotEdit={handleSpotEdit}
+                         calculateEndTime={calculateEndTime}
+                         transportModes={transportModes}
+                         handleModeChange={handleModeChange}
+                         calculateDuration={calculateDuration}
+                         totalSpots={sortedCurrentDaySpots.length}
+                       />
+                     ))}
+                   </SortableContext>
+                 </DndContext>
+               ) : (
+                 sortedCurrentDaySpots.map((pSpot, idx) => (
                  <React.Fragment key={pSpot.id}>
                    <div className="relative flex items-start gap-4">
                      {/* Dynamic Colored Icon */}
@@ -829,7 +1423,11 @@ export const PlanDetail: React.FC<{ planId: string; onNavigate: (path: string) =
                         <span className="material-symbols-outlined">{pSpot.spot.category === 'Food' ? 'restaurant' : pSpot.spot.category === 'Shopping' ? 'shopping_bag' : 'palette'}</span>
                      </div>
                      <div className="flex-1 pt-1 group">
-                       <p className="text-text-muted font-medium text-sm mb-1">{pSpot.startTime} - {parseInt(pSpot.startTime?.split(':')[0] || '0') + pSpot.spot.durationMinutes/60}:00 ({pSpot.spot.durationMinutes/60}h)</p>
+                       <p className="text-text-muted font-medium text-sm mb-1">
+                         {pSpot.startTime} - {calculateEndTime(pSpot.startTime || '09:00', pSpot.spot.durationMinutes || 60)}
+                         {' '}
+                         <span className="text-xs">(滞在: {pSpot.spot.durationMinutes || 60}分)</span>
+                       </p>
                        <h3 className="text-xl font-bold mb-1 flex items-center gap-2">
                           {pSpot.spot.name}
                           {pSpot.isMustVisit && (
@@ -862,12 +1460,12 @@ export const PlanDetail: React.FC<{ planId: string; onNavigate: (path: string) =
                    {pSpot.transportMode && idx < currentDaySpots.length - 1 && (
                      <TransportLine 
                        mode={transportModes[pSpot.id] || 'public'} 
-                       duration={calculateDuration(pSpot.transportMode, pSpot.transportDuration, transportModes[pSpot.id] || 'public')}
+                       duration={pSpot.transportDuration || calculateDuration(pSpot.transportMode, pSpot.transportDuration, transportModes[pSpot.id] || 'public')}
                        onModeChange={(m) => handleModeChange(pSpot.id, m)} 
                      />
                    )}
                  </React.Fragment>
-               ))}
+               )))}
             </div>
             
             <div className="flex justify-end">
@@ -882,6 +1480,131 @@ export const PlanDetail: React.FC<{ planId: string; onNavigate: (path: string) =
                  <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/a/aa/Google_Maps_icon_%282020%29.svg/512px-Google_Maps_icon_%282020%29.svg.png" className="w-6 h-6" alt="Google Maps"/>
                  Googleマップでルートを開く
                </button>
+            </div>
+
+            {/* 宿泊施設検索セクション */}
+            <div className="bg-white p-6 rounded-xl shadow-lg border border-primary/10">
+              <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+                <span className="material-symbols-outlined text-primary">hotel</span>
+                宿泊施設検索
+              </h3>
+              
+              <div className="mb-4">
+                <p className="text-sm text-text-muted mb-2">
+                  <span className="font-bold">推薦エリア: {plan.area}</span>
+                </p>
+              </div>
+
+              {/* 宿泊施設カテゴリ選択 */}
+              {hotelCategories.length > 0 && (
+                <div className="mb-4">
+                  <label className="block font-bold text-text-muted text-sm mb-2">宿泊施設の種類</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {hotelCategories.map(category => (
+                      <button
+                        key={category.name}
+                        onClick={() => setSelectedHotelCategory(category.name === selectedHotelCategory ? null : category.name)}
+                        className={`p-3 rounded-lg border-2 flex items-center gap-2 transition-all text-sm font-bold ${
+                          selectedHotelCategory === category.name
+                            ? 'border-primary bg-primary/5 text-primary'
+                            : 'border-gray-200 hover:border-gray-300 text-text-muted'
+                        }`}
+                      >
+                        <span>{category.icon}</span>
+                        <span>{category.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                  {selectedHotelCategory && (
+                    <p className="text-xs text-text-muted mt-2">
+                      {hotelCategories.find(c => c.name === selectedHotelCategory)?.description}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* ホテル名入力 */}
+              <div className="mb-4">
+                <label className="block font-bold text-text-muted text-sm mb-2">ホテル名で検索（オプション）</label>
+                <input
+                  type="text"
+                  placeholder="例: 鹿児島中央駅前ホテル"
+                  className="w-full px-4 py-2 bg-gray-50 rounded-lg border border-gray-200 focus:border-primary focus:outline-none"
+                  value={hotelName}
+                  onChange={e => setHotelName(e.target.value)}
+                />
+              </div>
+
+              {/* 検索ボタン */}
+              <button
+                onClick={handleHotelSearch}
+                disabled={isSearchingHotels}
+                className="w-full bg-primary text-white py-3 rounded-lg font-bold shadow-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-all mb-4"
+              >
+                {isSearchingHotels ? '検索中...' : '宿泊施設を検索'}
+              </button>
+
+              {/* 検索結果表示 */}
+              {hotelSearchResult && (
+                <div className="mt-4 pt-4 border-t border-gray-200">
+                  <h4 className="font-bold text-sm mb-3">予約サイトで検索</h4>
+                  <div className="grid grid-cols-1 gap-3">
+                    {hotelSearchResult.links.rakuten && !hotelSearchResult.links.rakuten.error && (
+                      <a
+                        href={hotelSearchResult.links.rakuten.link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-3 p-3 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors"
+                      >
+                        <span className="text-2xl">🏨</span>
+                        <div className="flex-1">
+                          <p className="font-bold text-sm">楽天トラベルで検索</p>
+                          <p className="text-xs text-text-muted">{hotelSearchResult.links.rakuten.description}</p>
+                        </div>
+                        <span className="material-symbols-outlined text-red-500">open_in_new</span>
+                      </a>
+                    )}
+                    {hotelSearchResult.links.yahoo && !hotelSearchResult.links.yahoo.error && (
+                      <a
+                        href={hotelSearchResult.links.yahoo.link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-3 p-3 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"
+                      >
+                        <span className="text-2xl">🏨</span>
+                        <div className="flex-1">
+                          <p className="font-bold text-sm">Yahoo!トラベルで検索</p>
+                          <p className="text-xs text-text-muted">{hotelSearchResult.links.yahoo.description}</p>
+                        </div>
+                        <span className="material-symbols-outlined text-blue-500">open_in_new</span>
+                      </a>
+                    )}
+                    {hotelSearchResult.links.jalan && !hotelSearchResult.links.jalan.error && (
+                      <a
+                        href={hotelSearchResult.links.jalan.link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 transition-colors"
+                      >
+                        <span className="text-2xl">🏨</span>
+                        <div className="flex-1">
+                          <p className="font-bold text-sm">じゃらんで検索</p>
+                          <p className="text-xs text-text-muted">{hotelSearchResult.links.jalan.description}</p>
+                        </div>
+                        <span className="material-symbols-outlined text-green-500">open_in_new</span>
+                      </a>
+                    )}
+                  </div>
+                  {hotelSearchResult.errors && hotelSearchResult.errors.length > 0 && (
+                    <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                      <p className="text-xs font-bold text-yellow-800 mb-1">一部の検索に問題があります:</p>
+                      {hotelSearchResult.errors.map((error, i) => (
+                        <p key={i} className="text-xs text-yellow-700">- {error.affiliate}: {error.error}</p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
          </div>
 

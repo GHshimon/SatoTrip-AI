@@ -17,3 +17,8 @@ opencage>=2.2.0
 google-api-python-client>=2.0.0
 feedparser>=6.0.10
 
+# プランエクスポート機能用
+reportlab>=4.0.0
+icalendar>=5.0.0
+Pillow>=10.0.0
+

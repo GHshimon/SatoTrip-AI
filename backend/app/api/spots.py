@@ -74,6 +74,30 @@ async def create_spot_endpoint(
 ):
     """スポット作成（管理者のみ）"""
     spot_dict = spot_data.model_dump()
+    
+    # duration_minutesが未指定の場合はAIで調査
+    if not spot_dict.get("duration_minutes"):
+        spot_name = spot_dict.get("name", "")
+        if spot_name:
+            try:
+                research_result = research_spot_info(spot_name)
+                if research_result and not research_result.get("error"):
+                    # 調査結果からduration_minutesを取得
+                    if "duration_minutes" in research_result:
+                        spot_dict["duration_minutes"] = research_result["duration_minutes"]
+                    # その他の情報も補完（未指定の場合のみ）
+                    if not spot_dict.get("category") and "category" in research_result:
+                        spot_dict["category"] = research_result["category"]
+                    if not spot_dict.get("description") and "description" in research_result:
+                        spot_dict["description"] = research_result["description"]
+                    if not spot_dict.get("area") and "area" in research_result:
+                        spot_dict["area"] = research_result["area"]
+            except Exception as e:
+                # AI調査失敗時はデフォルト値を使用（エラーはログに記録するが処理は続行）
+                from app.utils.error_handler import log_error
+                log_error("SPOT_DURATION_RESEARCH_ERROR", f"滞在時間調査エラー: {str(e)}", {"spot_name": spot_name})
+                spot_dict["duration_minutes"] = spot_dict.get("duration_minutes", 60)  # デフォルト値
+    
     spot = create_spot(db, spot_dict)
     return spot
 
@@ -86,7 +110,34 @@ async def update_spot_endpoint(
     db: Session = Depends(get_db)
 ):
     """スポット更新（管理者のみ）"""
+    from app.services.spot_service import get_spot
+    
     spot_dict = spot_data.model_dump(exclude_unset=True)
+    
+    # 既存のスポット情報を取得
+    existing_spot = get_spot(db, spot_id)
+    if not existing_spot:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="スポットが見つかりません"
+        )
+    
+    # duration_minutesが未設定（既存も新規も）の場合はAIで調査
+    if not spot_dict.get("duration_minutes") and not existing_spot.duration_minutes:
+        spot_name = spot_dict.get("name") or existing_spot.name
+        if spot_name:
+            try:
+                research_result = research_spot_info(spot_name)
+                if research_result and not research_result.get("error"):
+                    # 調査結果からduration_minutesを取得
+                    if "duration_minutes" in research_result:
+                        spot_dict["duration_minutes"] = research_result["duration_minutes"]
+            except Exception as e:
+                # AI調査失敗時はデフォルト値を使用（エラーはログに記録するが処理は続行）
+                from app.utils.error_handler import log_error
+                log_error("SPOT_DURATION_RESEARCH_ERROR", f"滞在時間調査エラー: {str(e)}", {"spot_id": spot_id, "spot_name": spot_name})
+                spot_dict["duration_minutes"] = spot_dict.get("duration_minutes", 60)  # デフォルト値
+    
     spot = update_spot(db, spot_id, spot_dict)
     return spot
 
@@ -155,6 +206,7 @@ async def bulk_add_spots_by_prefecture_endpoint(
                 "max_keywords": request.max_keywords,
                 "max_total_videos": request.max_total_videos,
                 "add_location": request.add_location,
+                "category": request.category,
             })
             if background_tasks is not None:
                 background_tasks.add_task(run_bulk_add_job, job_id)
@@ -179,7 +231,8 @@ async def bulk_add_spots_by_prefecture_endpoint(
             max_results_per_keyword=request.max_results_per_keyword,
             max_keywords=request.max_keywords,
             max_total_videos=request.max_total_videos,
-            add_location=request.add_location
+            add_location=request.add_location,
+            category=request.category
         )
         # #region agent log
         import json

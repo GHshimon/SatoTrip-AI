@@ -2,7 +2,7 @@
  * プラン管理API
  */
 import { apiClient } from './client';
-import { Plan, PlanRequest } from '../types';
+import { Plan, PlanRequest } from '../../types';
 
 export interface PlanGenerateRequest {
   destination: string;
@@ -10,6 +10,9 @@ export interface PlanGenerateRequest {
   budget: string;
   themes: string[];
   pending_spots: any[];
+  check_in_date?: string;
+  check_out_date?: string;
+  num_guests?: number;
 }
 
 export interface PlanCreateRequest {
@@ -23,13 +26,23 @@ export interface PlanCreateRequest {
   grounding_urls?: string[];
 }
 
+export interface PlanSpotUpdate {
+  id: string;
+  startTime?: string;
+  durationMinutes?: number;
+  transportDuration?: number;
+  transportMode?: string;
+  order?: number;
+}
+
 export interface PlanUpdateRequest {
   title?: string;
-  
+  area?: string;
+  days?: number;
   people?: number;
   budget?: number;
   thumbnail?: string;
-  spots?: any[];
+  spots?: PlanSpotUpdate[];
   grounding_urls?: string[];
 }
 
