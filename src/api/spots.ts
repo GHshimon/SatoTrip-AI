@@ -121,6 +121,7 @@ export interface BulkAddRequest {
   max_total_videos?: number;
   add_location?: boolean;
   run_async?: boolean;
+  category?: string;
 }
 
 export interface BulkAddResponse {
@@ -140,12 +141,14 @@ export interface BulkAddResponse {
   job_status?: string;
 }
 
+export type BulkAddJobStatus = 'pending' | 'processing' | 'completed' | 'failed';
+
 /**
  * 都道府県名で複数キーワード検索してまとめてスポットを追加（管理者のみ）
  */
 export async function bulkAddSpotsByPrefecture(
   prefecture: string,
-  options?: { max_results_per_keyword?: number; max_keywords?: number; max_total_videos?: number; add_location?: boolean; run_async?: boolean }
+  options?: { max_results_per_keyword?: number; max_keywords?: number; max_total_videos?: number; add_location?: boolean; run_async?: boolean; category?: string }
 ): Promise<BulkAddResponse> {
   const request: BulkAddRequest = {
     prefecture,
@@ -153,7 +156,8 @@ export async function bulkAddSpotsByPrefecture(
     max_keywords: options?.max_keywords,
     max_total_videos: options?.max_total_videos,
     add_location: options?.add_location ?? true,
-    run_async: options?.run_async
+    run_async: options?.run_async,
+    category: options?.category
   };
   const response = await apiClient.post<BulkAddResponse>('/api/spots/bulk-add-by-prefecture', request);
   return response;
@@ -182,6 +186,8 @@ function transformSpotResponse(data: any): Spot {
     location: data.latitude && data.longitude
       ? { lat: data.latitude, lng: data.longitude }
       : undefined,
+    created_at: data.created_at,
+    updated_at: data.updated_at,
   };
 }
 

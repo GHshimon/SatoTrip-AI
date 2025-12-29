@@ -12,6 +12,7 @@ from itertools import product
 import google.generativeai as genai
 from app.config import settings
 from app.utils.error_handler import log_error
+from app.utils.debug_logger import log_debug_step
 
 
 def load_keyword_config(keywords_config_path: str = "data/search_keywords.json") -> dict:
@@ -69,6 +70,12 @@ def get_youtube_videos(keyword: str, max_results: int = 5) -> tuple[List[Dict[st
     }
     
     try:
+        # #region agent log
+        import json
+        import time
+        with open(r'c:\projects\SatoTrip\.cursor\debug.log', 'a', encoding='utf-8') as f:
+            f.write(json.dumps({"location":"youtube_collection_service.py:72","message":"YouTube API call started","data":{"keyword":keyword,"max_results":max_results},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"},ensure_ascii=False)+'\n')
+        # #endregion
         res = requests.get(url, params=params, timeout=10)
         res.raise_for_status()
         data = res.json()
@@ -78,6 +85,10 @@ def get_youtube_videos(keyword: str, max_results: int = 5) -> tuple[List[Dict[st
             title = item["snippet"]["title"]
             link = f"https://www.youtube.com/watch?v={vid}"
             videos.append({"title": title, "url": link})
+        # #region agent log
+        with open(r'c:\projects\SatoTrip\.cursor\debug.log', 'a', encoding='utf-8') as f:
+            f.write(json.dumps({"location":"youtube_collection_service.py:81","message":"YouTube API call succeeded","data":{"keyword":keyword,"videos_count":len(videos),"videos":videos[:3]},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"},ensure_ascii=False)+'\n')
+        # #endregion
         return videos, None
     except requests.exceptions.HTTPError as e:
         # エラーレスポンスの詳細を取得
@@ -159,6 +170,12 @@ def summarize_with_gemini(video_title: str, video_url: str) -> Optional[str]:
 """
     try:
         genai.configure(api_key=settings.GEMINI_API_KEY)
+        # #region agent log
+        import json
+        import time
+        with open(r'c:\projects\SatoTrip\.cursor\debug.log', 'a', encoding='utf-8') as f:
+            f.write(json.dumps({"location":"youtube_collection_service.py:173","message":"Gemini API call started","data":{"video_title":video_title,"video_url":video_url,"model":"gemini-2.0-flash"},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"C"},ensure_ascii=False)+'\n')
+        # #endregion
         model = genai.GenerativeModel("gemini-2.0-flash")
         response = model.generate_content(prompt)
         
@@ -167,11 +184,27 @@ def summarize_with_gemini(video_title: str, video_url: str) -> Optional[str]:
             error_msg = "Gemini APIからのレスポンスが空です"
             if hasattr(response, 'prompt_feedback') and response.prompt_feedback:
                 error_msg += f": {response.prompt_feedback}"
+            # #region agent log
+            with open(r'c:\projects\SatoTrip\.cursor\debug.log', 'a', encoding='utf-8') as f:
+                f.write(json.dumps({"location":"youtube_collection_service.py:181","message":"Gemini API empty response","data":{"video_title":video_title,"error_msg":error_msg,"prompt_feedback":str(response.prompt_feedback) if hasattr(response, 'prompt_feedback') else None},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"A"},ensure_ascii=False)+'\n')
+            # #endregion
             log_error("GEMINI_EMPTY_RESPONSE", error_msg)
             return None
         
-        return response.text.strip()
+        summary_text = response.text.strip()
+        # #region agent log
+        with open(r'c:\projects\SatoTrip\.cursor\debug.log', 'a', encoding='utf-8') as f:
+            f.write(json.dumps({"location":"youtube_collection_service.py:184","message":"Gemini API call succeeded","data":{"video_title":video_title,"summary_length":len(summary_text),"summary_preview":summary_text[:200]},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"A"},ensure_ascii=False)+'\n')
+        # #endregion
+        return summary_text
     except Exception as e:
+        error_str = str(e)
+        # #region agent log
+        import json
+        import time
+        with open(r'c:\projects\SatoTrip\.cursor\debug.log', 'a', encoding='utf-8') as f:
+            f.write(json.dumps({"location":"youtube_collection_service.py:186","message":"Gemini API call failed","data":{"video_title":video_title,"error":error_str,"error_type":type(e).__name__,"quota_error":"429" in error_str or "quota" in error_str.lower()},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"A"},ensure_ascii=False)+'\n')
+        # #endregion
         log_error("GEMINI_SUMMARY_ERROR", f"Gemini要約失敗: {e}")
         return None
 
@@ -182,7 +215,8 @@ def collect_youtube_data(
     max_results_per_keyword: int = 5,
     max_keywords: Optional[int] = None,
     max_total_videos: Optional[int] = None,
-    stop_on_quota_exceeded: bool = True
+    stop_on_quota_exceeded: bool = True,
+    target_keywords: Optional[List[str]] = None
 ) -> Dict[str, Any]:
     """
     YouTubeデータ収集のメイン処理
@@ -192,6 +226,7 @@ def collect_youtube_data(
         keywords_config_path: キーワード設定JSONファイルのパス
         max_results_per_keyword: キーワードあたりの最大取得件数
         stop_on_quota_exceeded: クォータ制限に達した場合、処理を停止するか（デフォルト: True）
+        target_keywords: 検索キーワードを直接指定する場合のリスト（指定された場合、設定ファイルの生成ロジックは無視されます）
     
     Returns:
         収集結果の辞書（quota_exceeded、quota_exceeded_keywords、successful_keywordsを含む）
@@ -203,16 +238,20 @@ def collect_youtube_data(
     successful_keywords = 0
     failed_keywords = 0
     
-    # キーワード設定を読み込み
-    keyword_config = load_keyword_config(keywords_config_path)
-    
-    # 指定都道府県のキーワードのみを生成
-    if prefecture in keyword_config:
-        filtered_config = {prefecture: keyword_config[prefecture]}
-        search_keywords = generate_search_keywords(filtered_config)
+    if target_keywords and isinstance(target_keywords, list) and len(target_keywords) > 0:
+        # 指定キーワードを使用
+        search_keywords = target_keywords
     else:
-        # 指定都道府県が設定にない場合は全件
-        search_keywords = generate_search_keywords(keyword_config)
+        # キーワード設定を読み込み
+        keyword_config = load_keyword_config(keywords_config_path)
+        
+        # 指定都道府県のキーワードのみを生成
+        if prefecture in keyword_config:
+            filtered_config = {prefecture: keyword_config[prefecture]}
+            search_keywords = generate_search_keywords(filtered_config)
+        else:
+            # 指定都道府県が設定にない場合は全件
+            search_keywords = generate_search_keywords(keyword_config)
     
     # キーワード上限（切り詰め）
     if max_keywords is not None and isinstance(max_keywords, int) and max_keywords > 0:
@@ -224,10 +263,22 @@ def collect_youtube_data(
             if len(results) >= max_total_videos:
                 break
 
+        log_debug_step(
+            step="youtube_search",
+            status="started",
+            keyword=keyword
+        )
+        
         videos, error_type = get_youtube_videos(keyword, max_results_per_keyword)
         
         # クォータ制限エラーの場合
         if error_type == "quota_exceeded":
+            log_debug_step(
+                step="youtube_search",
+                status="error",
+                keyword=keyword,
+                error="YouTube API quota exceeded"
+            )
             quota_exceeded = True
             quota_exceeded_keywords += 1
             
@@ -241,12 +292,34 @@ def collect_youtube_data(
         
         # その他のエラーの場合
         elif error_type == "other":
+            log_debug_step(
+                step="youtube_search",
+                status="error",
+                keyword=keyword,
+                error="YouTube API error"
+            )
             failed_keywords += 1
             keyword_results[keyword] = []
             continue
         
         # 成功した場合
         if videos:
+            log_debug_step(
+                step="youtube_search",
+                status="completed",
+                keyword=keyword,
+                data={
+                    "videos_count": len(videos),
+                    "videos": [
+                        {
+                            "title": v.get("title", ""),
+                            "url": v.get("url", ""),
+                            "video_id": v.get("url", "").split("v=")[-1] if "v=" in v.get("url", "") else ""
+                        }
+                        for v in videos[:5]  # 最初の5件のみ
+                    ]
+                }
+            )
             successful_keywords += 1
             keyword_videos = []
             for v in videos:
@@ -254,8 +327,57 @@ def collect_youtube_data(
                 if max_total_videos is not None and isinstance(max_total_videos, int) and max_total_videos > 0:
                     if len(results) >= max_total_videos:
                         break
-                summary = summarize_with_gemini(v["title"], v["url"])
+                
+                log_debug_step(
+                    step="gemini_summary",
+                    status="started",
+                    keyword=keyword,
+                    video_title=v["title"]
+                )
+                
+                # #region agent log
+                import json as json_module
+                import time
+                with open(r'c:\projects\SatoTrip\.cursor\debug.log', 'a', encoding='utf-8') as f:
+                    f.write(json_module.dumps({"location":"youtube_collection_service.py:332","message":"Calling summarize_with_gemini","data":{"keyword":keyword,"video_title":v["title"],"video_url":v["url"]},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"A"},ensure_ascii=False)+'\n')
+                # #endregion
+                
+                try:
+                    summary = summarize_with_gemini(v["title"], v["url"])
+                    # #region agent log
+                    with open(r'c:\projects\SatoTrip\.cursor\debug.log', 'a', encoding='utf-8') as f:
+                        f.write(json_module.dumps({"location":"youtube_collection_service.py:340","message":"summarize_with_gemini completed","data":{"keyword":keyword,"video_title":v["title"],"summary_success":summary is not None,"summary_length":len(summary) if summary else 0},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"C"},ensure_ascii=False)+'\n')
+                    # #endregion
+                except Exception as gemini_error:
+                    # #region agent log
+                    with open(r'c:\projects\SatoTrip\.cursor\debug.log', 'a', encoding='utf-8') as f:
+                        f.write(json_module.dumps({"location":"youtube_collection_service.py:343","message":"summarize_with_gemini exception","data":{"keyword":keyword,"video_title":v["title"],"error":str(gemini_error),"error_type":type(gemini_error).__name__},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"C"},ensure_ascii=False)+'\n')
+                    # #endregion
+                    summary = None
+                
                 if summary:
+                    # 要約をパースして構造化データを取得（プレビュー用）
+                    summary_preview = summary[:500] if len(summary) > 500 else summary
+                    try:
+                        import re
+                        clean_json_str = re.sub(r"^```json\s*|\s*```$", "", summary.strip())
+                        if clean_json_str.strip() != "[]":
+                            summary_parsed = json.loads(clean_json_str)
+                        else:
+                            summary_parsed = None
+                    except:
+                        summary_parsed = None
+                    
+                    log_debug_step(
+                        step="gemini_summary",
+                        status="completed",
+                        keyword=keyword,
+                        video_title=v["title"],
+                        data={
+                            "summary_raw": summary_preview,
+                            "summary_parsed": summary_parsed
+                        }
+                    )
                     entry = {
                         "keyword": keyword,
                         "title": v["title"],
@@ -265,6 +387,14 @@ def collect_youtube_data(
                     }
                     results.append(entry)
                     keyword_videos.append(entry)
+                else:
+                    log_debug_step(
+                        step="gemini_summary",
+                        status="error",
+                        keyword=keyword,
+                        video_title=v["title"],
+                        error="Gemini summary returned None"
+                    )
                 time.sleep(1)  # アクセス制限回避
             
             keyword_results[keyword] = keyword_videos

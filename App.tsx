@@ -7,6 +7,7 @@ import { AdminDashboard, AdminUsers, AdminSpots, AdminAiSettings } from './pages
 import { plans, currentUser } from './mockData';
 import { AppConfig } from './config';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
+import { ToastProvider } from './components/Toast';
 
 // Simple Hash Router Implementation
 const AppContent: React.FC = () => {
@@ -127,11 +128,13 @@ const AppContent: React.FC = () => {
   return renderPage();
 };
 
-// Appコンポーネント（AuthProviderでラップ）
+// Appコンポーネント（AuthProviderとToastProviderでラップ）
 const App: React.FC = () => {
   return (
     <AuthProvider>
-      <AppContent />
+      <ToastProvider>
+        <AppContent />
+      </ToastProvider>
     </AuthProvider>
   );
 };

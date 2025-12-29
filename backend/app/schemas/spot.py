@@ -3,6 +3,7 @@
 """
 from pydantic import BaseModel
 from typing import Optional, List, Dict
+from datetime import datetime
 
 
 class SpotBase(BaseModel):
@@ -43,6 +44,8 @@ class SpotUpdate(BaseModel):
 class SpotResponse(SpotBase):
     """スポットレスポンススキーマ"""
     id: str
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
     
     class Config:
         from_attributes = True
@@ -56,6 +59,7 @@ class BulkAddRequest(BaseModel):
     max_total_videos: Optional[int] = None
     add_location: Optional[bool] = True
     run_async: Optional[bool] = None
+    category: Optional[str] = None
 
 
 class BulkAddResponse(BaseModel):

@@ -16,6 +16,7 @@ from app.services.spot_import_service import (
     add_location_to_existing_spots
 )
 from app.utils.error_handler import log_error
+from app.utils.debug_logger import init_debug_log, log_debug_step, finalize_debug_log
 
 
 def bulk_add_spots_by_prefecture(
@@ -25,7 +26,8 @@ def bulk_add_spots_by_prefecture(
     max_results_per_keyword: int = 5,
     max_keywords: Optional[int] = None,
     max_total_videos: Optional[int] = None,
-    add_location: bool = True
+    add_location: bool = True,
+    category: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     都道府県名を元に複数キーワードで検索し、まとめてスポットを追加
@@ -36,10 +38,47 @@ def bulk_add_spots_by_prefecture(
         keywords_config_path: キーワード設定JSONファイルのパス（デフォルト: backend/data/search_keywords.json）
         max_results_per_keyword: キーワードあたりの最大取得件数
         add_location: 位置情報を付与するか（デフォルト: True）
+        category: 特定のカテゴリに絞る場合（例: "Food"）
     
     Returns:
         処理結果の辞書（imported, errors, skipped, total_keywords, quota_exceeded等）
     """
+    # デバッグログセッションを開始
+    # #region agent log
+    import json as json_module
+    import time
+    with open(r'c:\projects\SatoTrip\.cursor\debug.log', 'a', encoding='utf-8') as f:
+        f.write(json_module.dumps({"location":"spot_bulk_service.py:45","message":"init_debug_log called","data":{"prefecture":prefecture,"max_results_per_keyword":max_results_per_keyword,"max_keywords":max_keywords,"max_total_videos":max_total_videos,"add_location":add_location,"category":category},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"A"},ensure_ascii=False)+'\n')
+    # #endregion
+    session_id = init_debug_log(
+        prefecture=prefecture,
+        max_results_per_keyword=max_results_per_keyword,
+        max_keywords=max_keywords,
+        max_total_videos=max_total_videos,
+        add_location=add_location,
+        category=category
+    )
+    # #region agent log
+    with open(r'c:\projects\SatoTrip\.cursor\debug.log', 'a', encoding='utf-8') as f:
+        f.write(json_module.dumps({"location":"spot_bulk_service.py:52","message":"init_debug_log completed","data":{"session_id":session_id},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"A"},ensure_ascii=False)+'\n')
+    # #endregion
+    
+    target_keywords = None
+    if category:
+        # カテゴリに応じた検索キーワードを生成
+        category_map = {
+            "Food": ["グルメ", "ランチ", "ディナー", "カフェ", "名物"],
+            "Nature": ["自然", "絶景", "公園", "海", "山", "川", "景色"],
+            "History": ["歴史", "神社", "寺", "史跡", "城", "文化財"],
+            "Art": ["美術館", "博物館", "アート", "ギャラリー", "芸術"],
+            "Shopping": ["買い物", "ショッピング", "お土産", "雑貨"],
+            "Relax": ["温泉", "サウナ", "スパ", "リラックス", "癒やし"],
+            "Culture": ["観光", "体験", "イベント", "祭り", "伝統"],
+        }
+        terms = category_map.get(category, [])
+        if terms:
+            target_keywords = [f"{prefecture} {term}" for term in terms]
+    
     # キーワード設定ファイルのパスを決定
     if keywords_config_path is None:
         # backend/data/search_keywords.jsonを相対パスで指定
@@ -59,6 +98,7 @@ def bulk_add_spots_by_prefecture(
         with open(r'c:\projects\SatoTrip\.cursor\debug.log', 'a', encoding='utf-8') as f:
             f.write(json.dumps({"location":"spot_bulk_service.py:52","message":"prefecture not found - returning error dict","data":{"prefecture":prefecture,"return_keys":["success","error","imported","errors","skipped","total_keywords","quota_exceeded"]},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"A"},ensure_ascii=False)+'\n')
         # #endregion
+        finalize_debug_log(summary={"error": error_msg})
         return {
             "success": False,
             "error": error_msg,
@@ -74,7 +114,26 @@ def bulk_add_spots_by_prefecture(
     
     # 指定都道府県のキーワードのみを生成
     filtered_config = {prefecture: keyword_config[prefecture]}
+    # #region agent log
+    import json
+    import time
+    with open(r'c:\projects\SatoTrip\.cursor\debug.log', 'a', encoding='utf-8') as f:
+        f.write(json.dumps({"location":"spot_bulk_service.py:87","message":"Generating keywords","data":{"prefecture":prefecture,"config_categories":filtered_config[prefecture].get("カテゴリ",[]),"config_areas":filtered_config[prefecture].get("エリア補助",[])},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"F"},ensure_ascii=False)+'\n')
+    # #endregion
     search_keywords = generate_search_keywords(filtered_config)
+    # #region agent log
+    with open(r'c:\projects\SatoTrip\.cursor\debug.log', 'a', encoding='utf-8') as f:
+        f.write(json.dumps({"location":"spot_bulk_service.py:88","message":"Keywords generated","data":{"keywords_count":len(search_keywords),"keywords_sample":search_keywords[:5]},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"F"},ensure_ascii=False)+'\n')
+    # #endregion
+    
+    log_debug_step(
+        step="keyword_generation",
+        status="completed",
+        data={
+            "keywords_count": len(search_keywords),
+            "keywords_sample": search_keywords[:10] if len(search_keywords) > 10 else search_keywords
+        }
+    )
     
     log_error(
         "BULK_ADD_START",
@@ -116,16 +175,44 @@ def bulk_add_spots_by_prefecture(
                 settings.BULK_ADD_HARD_MAX_VIDEOS
             )
 
+        log_debug_step(
+            step="youtube_collection",
+            status="started",
+            data={
+                "max_results_per_keyword": effective_max_results_per_keyword,
+                "max_keywords": effective_max_keywords,
+                "max_total_videos": effective_max_total_videos
+            }
+        )
+        
         youtube_data = collect_youtube_data(
             prefecture=prefecture,
             keywords_config_path=keywords_config_path,
             max_results_per_keyword=effective_max_results_per_keyword,
             max_keywords=effective_max_keywords,
             max_total_videos=effective_max_total_videos,
-            stop_on_quota_exceeded=True
+            stop_on_quota_exceeded=True,
+            target_keywords=target_keywords
+        )
+        
+        log_debug_step(
+            step="youtube_collection",
+            status="completed",
+            data={
+                "total_keywords": youtube_data.get("total_keywords", 0),
+                "total_videos": youtube_data.get("total_videos", 0),
+                "processed_keywords": youtube_data.get("successful_keywords", 0),
+                "failed_keywords": youtube_data.get("failed_keywords", 0),
+                "quota_exceeded": youtube_data.get("quota_exceeded", False)
+            }
         )
     except Exception as e:
         error_msg = f"YouTubeデータ収集エラー: {str(e)}"
+        log_debug_step(
+            step="youtube_collection",
+            status="error",
+            error=str(e)
+        )
         log_error("YOUTUBE_COLLECTION_ERROR", error_msg, {"prefecture": prefecture})
         # #region agent log
         import json
@@ -133,6 +220,7 @@ def bulk_add_spots_by_prefecture(
         with open(r'c:\projects\SatoTrip\.cursor\debug.log', 'a', encoding='utf-8') as f:
             f.write(json.dumps({"location":"spot_bulk_service.py:83","message":"youtube collection error - returning error dict","data":{"prefecture":prefecture,"error":str(e),"return_keys":["success","error","imported","errors","skipped","total_keywords","quota_exceeded"]},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"},ensure_ascii=False)+'\n')
         # #endregion
+        finalize_debug_log(summary={"error": error_msg, "total_keywords": len(search_keywords)})
         return {
             "success": False,
             "error": error_msg,
@@ -165,6 +253,11 @@ def bulk_add_spots_by_prefecture(
             with open(r'c:\projects\SatoTrip\.cursor\debug.log', 'a', encoding='utf-8') as f:
                 f.write(json.dumps({"location":"spot_bulk_service.py:106","message":"quota exceeded with no videos - returning error dict","data":{"prefecture":prefecture,"youtube_data_keys":list(youtube_data.keys())},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"C"},ensure_ascii=False)+'\n')
             # #endregion
+            finalize_debug_log(summary={
+                "error": "YouTube APIクォータ制限に達しました",
+                "total_keywords": len(search_keywords),
+                "quota_exceeded": True
+            })
             return {
                 "success": False,
                 "error": "YouTube APIクォータ制限に達しました。データが収集できませんでした。",
@@ -179,14 +272,33 @@ def bulk_add_spots_by_prefecture(
             }
     
     # スポットにインポート
+    log_debug_step(
+        step="spot_import",
+        status="started"
+    )
     try:
         import_result = import_spots_from_youtube_data(
             db=db,
             youtube_data=youtube_data,
             prefecture=prefecture
         )
+        log_debug_step(
+            step="spot_import",
+            status="completed",
+            data={
+                "imported_count": import_result.get("imported", 0),
+                "errors_count": import_result.get("errors", 0),
+                "skipped_count": import_result.get("skipped", 0),
+                "spot_ids": import_result.get("spot_ids", [])[:10]  # 最初の10件のみ
+            }
+        )
     except Exception as e:
         error_msg = f"スポットインポートエラー: {str(e)}"
+        log_debug_step(
+            step="spot_import",
+            status="error",
+            error=str(e)
+        )
         log_error("SPOT_IMPORT_ERROR", error_msg, {"prefecture": prefecture})
         # #region agent log
         import json
@@ -194,6 +306,11 @@ def bulk_add_spots_by_prefecture(
         with open(r'c:\projects\SatoTrip\.cursor\debug.log', 'a', encoding='utf-8') as f:
             f.write(json.dumps({"location":"spot_bulk_service.py:127","message":"spot import error - returning error dict","data":{"prefecture":prefecture,"error":str(e),"youtube_data_keys":list(youtube_data.keys()) if youtube_data else None},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"D"},ensure_ascii=False)+'\n')
         # #endregion
+        finalize_debug_log(summary={
+            "error": error_msg,
+            "total_keywords": len(search_keywords),
+            "quota_exceeded": youtube_data.get("quota_exceeded", False) if youtube_data else False
+        })
         return {
             "success": False,
             "error": error_msg,
@@ -210,6 +327,10 @@ def bulk_add_spots_by_prefecture(
     # 位置情報を付与（オプション）
     location_result = None
     if add_location:
+        log_debug_step(
+            step="location_assignment",
+            status="started"
+        )
         try:
             spot_ids = import_result.get("spot_ids") or []
             if not isinstance(spot_ids, list):
@@ -223,13 +344,28 @@ def bulk_add_spots_by_prefecture(
                     spot_ids=spot_ids,
                     prefecture=prefecture
                 )
+            log_debug_step(
+                step="location_assignment",
+                status="completed",
+                data={
+                    "updated_count": location_result.get("updated", 0),
+                    "errors_count": location_result.get("errors", 0),
+                    "skipped_count": location_result.get("skipped", 0),
+                    "total_processed": location_result.get("total_processed", 0)
+                }
+            )
         except Exception as e:
+            log_debug_step(
+                step="location_assignment",
+                status="error",
+                error=str(e)
+            )
             log_error("LOCATION_UPDATE_ERROR", f"位置情報付与エラー: {str(e)}", {"prefecture": prefecture})
             # 位置情報のエラーは致命的ではないので続行
     
     # 結果をまとめる
     result = {
-        "success": True,
+        "success": True if import_result.get("imported", 0) > 0 or youtube_data.get("total_videos", 0) > 0 else False,
         "imported": import_result.get("imported", 0),
         "errors": import_result.get("errors", 0),
         "skipped": import_result.get("skipped", 0),
@@ -239,6 +375,10 @@ def bulk_add_spots_by_prefecture(
         "failed_keywords": youtube_data.get("failed_keywords", 0),
         "total_videos": youtube_data.get("total_videos", 0)
     }
+    
+    # Gemini要約が全て失敗した場合の警告
+    if result["total_videos"] == 0 and result["processed_keywords"] > 0:
+        result["error"] = "YouTube検索は成功しましたが、Gemini要約が全て失敗しました。APIクォータを確認してください。"
     
     # 位置情報の結果を追加
     if location_result:
@@ -250,6 +390,28 @@ def bulk_add_spots_by_prefecture(
         f"都道府県 '{prefecture}' の一括追加が完了しました。追加件数: {result['imported']}",
         result
     )
+    
+    # デバッグログを保存
+    # #region agent log
+    import json as json_module
+    import time
+    with open(r'c:\projects\SatoTrip\.cursor\debug.log', 'a', encoding='utf-8') as f:
+        f.write(json_module.dumps({"location":"spot_bulk_service.py:365","message":"finalize_debug_log called","data":{"summary":result},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"F"},ensure_ascii=False)+'\n')
+    # #endregion
+    log_file = finalize_debug_log(summary={
+        "total_keywords": result.get("total_keywords", 0),
+        "processed_keywords": result.get("processed_keywords", 0),
+        "total_videos": result.get("total_videos", 0),
+        "imported_spots": result.get("imported", 0),
+        "location_updated": result.get("location_updated", 0),
+        "errors": result.get("errors", 0)
+    })
+    # #region agent log
+    with open(r'c:\projects\SatoTrip\.cursor\debug.log', 'a', encoding='utf-8') as f:
+        f.write(json_module.dumps({"location":"spot_bulk_service.py:375","message":"finalize_debug_log completed","data":{"log_file":log_file},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"F"},ensure_ascii=False)+'\n')
+    # #endregion
+    if log_file:
+        log_error("DEBUG_LOG_SAVED", f"デバッグログを保存しました: {log_file}")
     
     return result
 

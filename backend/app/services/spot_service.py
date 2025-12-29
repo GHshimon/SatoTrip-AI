@@ -48,8 +48,10 @@ def get_spots(
         query = query.filter(Spot.category == category)
     if keyword:
         query = query.filter(
-            Spot.name.contains(keyword) |
-            Spot.description.contains(keyword)
+            or_(
+                Spot.name.contains(keyword),
+                Spot.description.contains(keyword)
+            )
         )
     
     return query.offset(skip).limit(limit).all()

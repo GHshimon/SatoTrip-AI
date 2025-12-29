@@ -66,6 +66,7 @@ def run_bulk_add_job(job_id: str) -> None:
             max_keywords=payload.get("max_keywords"),
             max_total_videos=payload.get("max_total_videos"),
             add_location=payload.get("add_location", True),
+            category=payload.get("category")
         )
         # bulk_add_spots_by_prefecture内でインポート/位置情報まで完結するため、ここではstageだけ更新
         _update_job(job_id, job_status="succeeded", result=result, error=None)
