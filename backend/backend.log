@@ -1,0 +1,52 @@
+nohup: ignoring input
+/home/ubuntu/SatoTrip-AI/backend/app/services/gemini_service.py:5: FutureWarning: 
+
+All support for the `google.generativeai` package has ended. It will no longer be receiving 
+updates or bug fixes. Please switch to the `google.genai` package as soon as possible.
+See README for more details:
+
+https://github.com/google-gemini/deprecated-generative-ai-python/blob/main/README.md
+
+  import google.generativeai as genai
+INFO:     Started server process [9203]
+INFO:     Waiting for application startup.
+2026-02-15 14:14:19,023 - app.main - INFO - データベースを初期化しています...
+2026-02-15 14:14:19,025 - app.main - INFO - データベース初期化完了
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     10.20.161.1:37654 - "POST /auth/login HTTP/1.1" 401 Unauthorized
+INFO:     10.20.161.1:52758 - "HEAD / HTTP/1.1" 405 Method Not Allowed
+INFO:     10.20.161.1:52764 - "GET / HTTP/1.1" 200 OK
+INFO:     10.20.161.1:52780 - "GET / HTTP/1.1" 200 OK
+INFO:     10.20.161.1:60366 - "OPTIONS /api/spots HTTP/1.1" 200 OK
+INFO:     10.20.161.1:60380 - "GET /api/spots HTTP/1.1" 200 OK
+INFO:     10.20.161.1:46044 - "OPTIONS /api/spots?area=%E6%B2%96%E7%B8%84 HTTP/1.1" 200 OK
+INFO:     10.20.161.1:46058 - "GET /api/spots?area=%E6%B2%96%E7%B8%84 HTTP/1.1" 200 OK
+INFO:     10.20.161.1:46070 - "GET /api/spots HTTP/1.1" 200 OK
+INFO:     10.20.161.1:41350 - "OPTIONS /api/spots?keyword=ka HTTP/1.1" 200 OK
+INFO:     10.20.161.1:41358 - "GET /api/spots?keyword=ka HTTP/1.1" 200 OK
+INFO:     10.20.161.1:47180 - "OPTIONS /api/spots?keyword=%E3%81%8B HTTP/1.1" 200 OK
+INFO:     10.20.161.1:47196 - "GET /api/spots?keyword=%E3%81%8B HTTP/1.1" 200 OK
+INFO:     10.20.161.1:47212 - "OPTIONS /api/spots?keyword=%E9%B9%BF%E5%85%90%E5%B3%B6 HTTP/1.1" 200 OK
+INFO:     10.20.161.1:47218 - "GET /api/spots?keyword=%E9%B9%BF%E5%85%90%E5%B3%B6 HTTP/1.1" 200 OK
+INFO:     10.20.161.1:57540 - "OPTIONS /auth/login HTTP/1.1" 200 OK
+INFO:     10.20.161.1:57548 - "POST /auth/login HTTP/1.1" 401 Unauthorized
+INFO:     10.20.161.1:37830 - "GET / HTTP/1.1" 200 OK
+INFO:     10.20.161.1:37836 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+INFO:     10.20.161.1:49428 - "GET /docs HTTP/1.1" 200 OK
+INFO:     10.20.161.1:49442 - "GET /openapi.json HTTP/1.1" 200 OK
+INFO:     10.65.124.1:55412 - "OPTIONS /api/plans/generate-plan HTTP/1.1" 200 OK
+INFO:     10.65.124.1:55420 - "POST /api/plans/generate-plan HTTP/1.1" 401 Unauthorized
+INFO:     10.65.124.1:57218 - "OPTIONS /api/plans HTTP/1.1" 200 OK
+INFO:     10.65.124.1:57224 - "OPTIONS /api/folders HTTP/1.1" 200 OK
+INFO:     10.65.124.1:57238 - "OPTIONS /api/folders HTTP/1.1" 200 OK
+INFO:     10.65.124.1:57244 - "OPTIONS /api/plans HTTP/1.1" 200 OK
+INFO:     10.65.124.1:57248 - "GET /api/plans HTTP/1.1" 401 Unauthorized
+INFO:     10.65.124.1:57264 - "GET /api/folders HTTP/1.1" 401 Unauthorized
+INFO:     10.65.124.1:57280 - "GET /api/plans HTTP/1.1" 401 Unauthorized
+INFO:     10.65.124.1:57282 - "GET /api/folders HTTP/1.1" 401 Unauthorized
+INFO:     10.65.124.1:53586 - "GET /docs HTTP/1.1" 200 OK
+INFO:     10.65.124.1:53592 - "GET /openapi.json HTTP/1.1" 200 OK
+INFO:     10.26.13.1:33066 - "GET / HTTP/1.1" 200 OK
+INFO:     10.209.232.1:50692 - "GET / HTTP/1.1" 200 OK
+INFO:     10.209.232.1:50702 - "GET /favicon.ico HTTP/1.1" 404 Not Found

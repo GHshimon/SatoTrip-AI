@@ -1,0 +1,413 @@
+
+export const MySpots: React.FC<{ onNavigate: (path: string) => void }> = ({ onNavigate }) => {
+  const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedArea, setSelectedArea] = useState('すべて');
+  const [selectedCategory, setSelectedCategory] = useState('すべて');
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [filteredSpots, setFilteredSpots] = useState<Spot[]>([]);
+  const [allSpots, setAllSpots] = useState<Spot[]>([]); // For adding new spots locally before refresh
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Spot addition states
+  const [isAddingSpot, setIsAddingSpot] = useState(false);
+  const [addSearchQuery, setAddSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<Spot[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+
+  // Fetch available filter options (Mock or from API if available)
+  const availableAreas = useMemo(() => ['すべて', '北海道', '東京', '京都', '大阪', '福岡', '沖縄'], []);
+  const availableCategories = useMemo(() => ['すべて', 'History', 'Nature', 'Food', 'Culture', 'Shopping', 'Art', 'Relax', 'Tourism', 'Experience', 'Event', 'HotSpring', 'ScenicView', 'Cafe', 'Hotel', 'Drink', 'Fashion', 'Date', 'Drive'], []);
+
+  // Translate categories for display
+  const getCategoryLabel = (cat: string) => {
+    const map: { [key: string]: string } = {
+      'History': '歴史', 'Nature': '自然', 'Food': 'グルメ',
+      'Culture': '文化', 'Shopping': '買い物', 'Art': 'アート', 'Relax': 'リラックス',
+      'Tourism': '観光', 'Experience': '体験', 'Event': 'イベント', 'HotSpring': '温泉',
+      'ScenicView': '絶景', 'Cafe': 'カフェ', 'Hotel': '宿泊', 'Drink': 'お酒',
+      'Fashion': 'ファッション', 'Date': 'デート', 'Drive': 'ドライブ'
+    };
+    return map[cat] || cat;
+  };
+
+  // Server-side filtering effect
+  useEffect(() => {
+    const fetchSpots = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+
+        const filters: any = {};
+        if (selectedArea !== 'すべて') filters.area = selectedArea;
+        if (selectedCategory !== 'すべて') filters.category = selectedCategory;
+        if (searchTerm) filters.keyword = searchTerm;
+
+        const fetchedSpots = await spotApi.getSpots(filters);
+        setFilteredSpots(fetchedSpots);
+        // Also keep track of all fetched for local addition context if needed
+        // but primarily we use filteredSpots for display
+      } catch (err: any) {
+        console.error('Failed to fetch spots:', err);
+        setError(err.detail || err.message || 'スポットの取得に失敗しました');
+        if (AppConfig.IS_DEMO_MODE) {
+          // Demo fallback logic
+          let result = spots;
+          if (selectedArea !== 'すべて') result = result.filter(s => s.area === selectedArea);
+          if (selectedCategory !== 'すべて') result = result.filter(s => s.category === selectedCategory);
+          if (searchTerm) result = result.filter(s => s.name.includes(searchTerm));
+          setFilteredSpots(result);
+        }
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    // Debounce search
+    const timeoutId = setTimeout(fetchSpots, 300);
+    return () => clearTimeout(timeoutId);
+  }, [selectedArea, selectedCategory, searchTerm]);
+
+  const toggleSelection = (id: string) => {
+    setSelectedIds(prev =>
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    );
+  };
+
+
+  const handleCreatePlan = () => {
+    localStorage.setItem(AppConfig.STORAGE_KEYS.PENDING_SPOTS, JSON.stringify(selectedIds));
+    onNavigate('/create');
+  };
+
+  // Search for spots to add
+  useEffect(() => {
+    const searchSpots = async () => {
+      if (!addSearchQuery.trim() || !isAddingSpot) {
+        setSearchResults([]);
+        return;
+      }
+
+      setIsSearching(true);
+      try {
+        const results = await spotApi.getSpots({ keyword: addSearchQuery });
+        // Filter out spots that are already in allSpots
+        const existingIds = new Set(allSpots.map(s => s.id));
+        const newSpots = results.filter(s => !existingIds.has(s.id));
+        setSearchResults(newSpots);
+      } catch (err: any) {
+        console.error('Failed to search spots:', err);
+        setSearchResults([]);
+      } finally {
+        setIsSearching(false);
+      }
+    };
+
+    // Debounce search
+    const timeoutId = setTimeout(searchSpots, 300);
+    return () => clearTimeout(timeoutId);
+  }, [addSearchQuery, isAddingSpot, allSpots]);
+
+  const handleAddSpot = (spot: Spot) => {
+    setFilteredSpots(prev => [spot, ...prev]);
+    setAddSearchQuery('');
+    setSearchResults([]);
+    setIsAddingSpot(false);
+  };
+
+  const toggleAddForm = () => {
+    setIsAddingSpot(!isAddingSpot);
+    setAddSearchQuery('');
+    setSearchResults([]);
+  };
+
+
+  if (isLoading) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-8 py-10">
+        <div className="flex justify-center items-center min-h-[400px]">
+          <div className="text-center">
+            <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-text-muted">スポットを読み込み中...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error && !AppConfig.IS_DEMO_MODE) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-8 py-10">
+        <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-center">
+          <p className="text-red-600 font-bold mb-2">エラーが発生しました</p>
+          <p className="text-red-500 text-sm">{error}</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 sm:px-8 py-10 min-h-screen pb-32">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+        <div>
+          <h1 className="text-3xl font-black text-text-light">My Spot</h1>
+          <p className="text-text-muted">登録済みの観光スポット一覧です。ここから旅の計画を始めましょう。</p>
+        </div>
+        <div className="flex gap-2">
+          <div className="bg-white rounded-full p-1 border border-gray-200 flex shadow-sm">
+            <button
+              onClick={() => setViewMode('list')}
+              className={`px-4 py-2 rounded-full text-sm font-bold flex items-center gap-1 transition-all ${viewMode === 'list' ? 'bg-primary text-white shadow-md' : 'text-text-muted hover:bg-gray-50'}`}
+            >
+              <span className="material-symbols-outlined text-lg">list</span> リスト
+            </button>
+            <button
+              onClick={() => setViewMode('map')}
+              className={`px-4 py-2 rounded-full text-sm font-bold flex items-center gap-1 transition-all ${viewMode === 'map' ? 'bg-primary text-white shadow-md' : 'text-text-muted hover:bg-gray-50'}`}
+            >
+              <span className="material-symbols-outlined text-lg">map</span> マップ
+            </button>
+          </div>
+          <button
+            onClick={toggleAddForm}
+            className="bg-primary text-white px-6 py-3 rounded-full font-bold shadow-lg flex items-center gap-2 hover:opacity-90 transition-opacity"
+          >
+            <span className="material-symbols-outlined">{isAddingSpot ? 'close' : 'add'}</span>
+            {isAddingSpot ? 'キャンセル' : 'スポットを追加'}
+          </button>
+        </div>
+      </div>
+
+      {/* Filters Section */}
+      <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 mb-8 space-y-6">
+        {/* Search */}
+        <div className="relative">
+          <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-text-muted">search</span>
+          <input
+            type="text"
+            placeholder="スポット名で検索"
+            className="w-full pl-12 pr-4 py-3 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+
+        <div className="h-px bg-gray-100" />
+
+        {/* Cross Filters */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label className="text-xs font-bold text-text-muted uppercase tracking-wider mb-3 block">エリアで絞り込み</label>
+            <div className="flex flex-wrap gap-2">
+              {availableAreas.map(area => (
+                <button
+                  key={area}
+                  onClick={() => setSelectedArea(area)}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${selectedArea === area
+                    ? 'bg-secondary text-text-light shadow-sm ring-2 ring-secondary ring-offset-1'
+                    : 'bg-gray-50 text-text-muted hover:bg-gray-100'
+                    }`}
+                >
+                  {area}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label className="text-xs font-bold text-text-muted uppercase tracking-wider mb-3 block">カテゴリーで絞り込み</label>
+            <div className="flex flex-wrap gap-2">
+              {availableCategories.map(cat => (
+                <button
+                  key={cat}
+                  onClick={() => setSelectedCategory(cat)}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${selectedCategory === cat
+                    ? 'bg-primary text-white shadow-md ring-2 ring-primary ring-offset-1'
+                    : 'bg-gray-50 text-text-muted hover:bg-gray-100'
+                    }`}
+                >
+                  {cat !== 'すべて' && (
+                    <span className="material-symbols-outlined text-sm">
+                      {cat === 'Food' ? 'restaurant' : cat === 'Shopping' ? 'shopping_bag' : cat === 'Nature' ? 'forest' : cat === 'History' ? 'temple_buddhist' : 'local_activity'}
+                    </span>
+                  )}
+                  {getCategoryLabel(cat)}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Inline Add Spot Form */}
+      {isAddingSpot && (
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6 animate-fade-in">
+          <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+            <span className="material-symbols-outlined text-primary">search</span>
+            データベースから検索して追加
+          </h2>
+          <div className="relative mb-4">
+            <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-text-muted">search</span>
+            <input
+              type="text"
+              placeholder="スポット名、エリア、カテゴリーで検索..."
+              className="w-full pl-12 pr-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary/50"
+              value={addSearchQuery}
+              onChange={(e) => setAddSearchQuery(e.target.value)}
+              autoFocus
+            />
+          </div>
+
+          {/* Search Results */}
+          {isSearching && (
+            <div className="text-center py-8">
+              <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+              <p className="text-text-muted text-sm">検索中...</p>
+            </div>
+          )}
+
+          {!isSearching && addSearchQuery && searchResults.length === 0 && (
+            <div className="text-center py-8">
+              <span className="material-symbols-outlined text-4xl text-gray-300 mb-2 block">search_off</span>
+              <p className="text-text-muted">該当するスポットが見つかりません</p>
+            </div>
+          )}
+
+          {!isSearching && searchResults.length > 0 && (
+            <div className="space-y-3 max-h-96 overflow-y-auto">
+              {searchResults.map(spot => (
+                <div
+                  key={spot.id}
+                  className="flex items-center gap-4 p-4 border border-gray-200 rounded-xl hover:border-primary hover:bg-primary/5 transition-all group"
+                >
+                  <img src={spot.image} className="w-16 h-16 rounded-lg object-cover shadow-sm" alt="" />
+                  <div className="flex-1">
+                    <h3 className="font-bold text-text-light">{spot.name}</h3>
+                    <div className="flex items-center gap-3 text-sm text-text-muted mt-1">
+                      <span>{spot.area}</span>
+                      <span className="bg-primary/10 text-primary px-2 py-0.5 rounded-full text-xs font-bold">{spot.category}</span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleAddSpot(spot)}
+                    className="bg-primary text-white px-4 py-2 rounded-full font-bold text-sm hover:opacity-90 transition-opacity flex items-center gap-1"
+                  >
+                    <span className="material-symbols-outlined text-sm">add</span>
+                    追加
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {!addSearchQuery && (
+            <div className="text-center py-8 text-text-muted text-sm">
+              <span className="material-symbols-outlined text-3xl mb-2 block opacity-30">info</span>
+              スポット名やエリアを入力して検索してください
+            </div>
+          )}
+        </div>
+      )}
+
+
+      {viewMode === 'map' ? (
+        <div className="mb-8 animate-fade-in">
+          <SpotMap
+            spots={filteredSpots}
+            height="600px"
+            onSpotClick={(spot) => {
+              // Could implement scroll to row or modal
+              console.log('Clicked', spot.name);
+            }}
+          />
+          <p className="text-right text-xs text-text-muted mt-2">
+            表示件数: {filteredSpots.length}件 (位置情報のないスポットは表示されません)
+          </p>
+        </div>
+      ) : (
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden animate-fade-in">
+          <div className="p-4 border-b border-gray-100 flex gap-4">
+            <div className="flex-1 relative">
+              <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-text-muted">search</span>
+              <input
+                type="text"
+                placeholder="スポット名、エリア、カテゴリーで検索..."
+                className="w-full pl-10 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            <button className="px-4 py-2 border border-gray-200 rounded-xl flex items-center gap-2 text-sm font-bold hover:bg-gray-50"><span className="material-symbols-outlined">filter_list</span> フィルター</button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left whitespace-nowrap">
+              <thead className="bg-gray-50 text-text-muted text-sm">
+                <tr>
+                  <th className="p-4 w-10"></th>
+                  <th className="p-4">スポット名</th>
+                  <th className="p-4">エリア</th>
+                  <th className="p-4">カテゴリー</th>
+                  <th className="p-4 text-right">アクション</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {filteredSpots.length > 0 ? (
+                  filteredSpots.map(spot => {
+                    const isSelected = selectedIds.includes(spot.id);
+                    return (
+                      <tr
+                        key={spot.id}
+                        className={`hover:bg-gray-50 transition-colors cursor-pointer ${isSelected ? 'bg-primary/5' : ''}`}
+                        onClick={() => toggleSelection(spot.id)}
+                      >
+                        <td className="p-4 text-center">
+                          <div className={`w-5 h-5 rounded border flex items-center justify-center ${isSelected ? 'bg-primary border-primary text-white' : 'border-gray-300 bg-white'}`}>
+                            {isSelected && <span className="material-symbols-outlined text-sm">check</span>}
+                          </div>
+                        </td>
+                        <td className="p-4 flex items-center gap-3">
+                          <img src={spot.image} className="w-12 h-12 rounded-lg object-cover shadow-sm" alt="" />
+                          <span className="font-bold">{spot.name}</span>
+                        </td>
+                        <td className="p-4">{spot.area}</td>
+                        <td className="p-4"><span className="bg-primary/10 text-primary px-3 py-1 rounded-full text-xs font-bold">{spot.category}</span></td>
+                        <td className="p-4 text-right">
+                          <button className="p-2 hover:bg-gray-200 rounded-full text-text-muted transition-colors mr-2" title="編集"><span className="material-symbols-outlined">edit</span></button>
+                          <button className="p-2 hover:bg-red-100 rounded-full text-red-500 transition-colors" title="削除"><span className="material-symbols-outlined">delete</span></button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr>
+                    <td colSpan={5} className="p-12 text-center text-text-muted">
+                      <span className="material-symbols-outlined text-4xl mb-2 block">search_off</span>
+                      該当するスポットが見つかりません
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Action Bar */}
+      {selectedIds.length > 0 && (
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-gray-900 text-white pl-6 pr-2 py-2 rounded-full shadow-2xl flex items-center gap-6 z-50 animate-bounce-in border border-gray-700">
+          <div className="flex flex-col">
+            <span className="font-bold text-sm">{selectedIds.length}件選択中</span>
+            <span className="text-xs text-gray-400">お気に入りから追加</span>
+          </div>
+          <button
+            onClick={handleCreatePlan}
+            className="bg-primary hover:bg-primary/90 text-white px-6 py-3 rounded-full font-bold text-sm shadow-lg transition-all flex items-center gap-2"
+          >
+            <span className="material-symbols-outlined">auto_awesome</span>
+            プランを作成
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};

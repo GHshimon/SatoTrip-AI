@@ -1,0 +1,429 @@
+
+import React, { useState, useMemo, useEffect } from 'react';
+import { plans, spots, hotels } from '../mockData';
+import * as hotelApi from '../src/api/hotels';
+import { HotelCategory, HotelSearchRequest, HotelSearchResult } from '../types';
+import { AppConfig } from '../config';
+import * as planApi from '../src/api/plans';
+import * as spotApi from '../src/api/spots';
+import { Plan, Spot } from '../types';
+import { SpotMap } from '../components/SpotMap';
+import { useToast } from '../components/Toast';
+import { FolderTree } from '../components/FolderTree';
+import * as folderApi from '../src/api/folders';
+import { PlanFolder } from '../types';
+
+export const PlanList: React.FC<{ onNavigate: (path: string) => void }> = ({ onNavigate }) => {
+  const [plansList, setPlansList] = useState<Plan[]>([]);
+  const [folders, setFolders] = useState<PlanFolder[]>([]);
+  const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Selection & Favorite States
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  
+  // Move Modal
+  const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
+  const [targetMoveFolderId, setTargetMoveFolderId] = useState<string>('');
+
+  const { showSuccess, showError, showWarning } = useToast();
+
+  const fetchFolders = async () => {
+    try {
+      const fetchedFolders = await folderApi.getFolders();
+      setFolders(fetchedFolders);
+    } catch (err) {
+      console.error('Failed to fetch folders', err);
+    }
+  };
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+        const [fetchedPlans, fetchedFolders] = await Promise.all([
+          planApi.getPlans(),
+          folderApi.getFolders()
+        ]);
+        setPlansList(fetchedPlans);
+        setFolders(fetchedFolders);
+      } catch (err: any) {
+        console.error('Failed to fetch data:', err);
+        setError(err.detail || err.message || 'データの取得に失敗しました');
+        // フォールバック: モックデータを使用
+        if (AppConfig.IS_DEMO_MODE) {
+          setPlansList(plans);
+        }
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  // Filter Plans based on selected folder
+  const displayPlans = useMemo(() => {
+    if (selectedFolderId === null) return plansList;
+    return plansList.filter(p => p.folderId === selectedFolderId);
+  }, [plansList, selectedFolderId]);
+
+  // Toggle Selection Mode
+  const toggleSelectionMode = () => {
+    setIsSelectionMode(!isSelectionMode);
+    setSelectedIds([]);
+  };
+
+  // Toggle Selection based on ID
+  const toggleSelection = (id: string) => {
+    setSelectedIds(prev =>
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    );
+  };
+
+  // Select/Deselect All (Scoped to current view)
+  const toggleSelectAll = () => {
+    if (selectedIds.length === displayPlans.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(displayPlans.map(p => p.id));
+    }
+  };
+
+  // Toggle Favorite
+  const handleToggleFavorite = async (e: React.MouseEvent, plan: Plan) => {
+    e.stopPropagation();
+    try {
+      const newStatus = !plan.isFavorite;
+      // Optimistic update
+      setPlansList(prev => prev.map(p => p.id === plan.id ? { ...p, isFavorite: newStatus } : p));
+
+      await planApi.updatePlan(plan.id, { is_favorite: newStatus });
+    } catch (err) {
+      console.error('Failed to update favorite:', err);
+      setPlansList(prev => prev.map(p => p.id === plan.id ? { ...p, isFavorite: !plan.isFavorite } : p));
+      showError('お気に入りの更新に失敗しました');
+    }
+  };
+
+  // Delete Single Plan
+  const handleDeletePlan = async (e: React.MouseEvent, planId: string) => {
+    e.stopPropagation();
+
+    const plan = plansList.find(p => p.id === planId);
+    if (plan?.isFavorite) {
+      showWarning('お気に入りのプランは削除できません');
+      return;
+    }
+
+    if (!window.confirm('このプランを削除してもよろしいですか？\n削除すると元に戻すことはできません。')) {
+      return;
+    }
+
+    try {
+      await planApi.deletePlan(planId);
+      setPlansList(prev => prev.filter(p => p.id !== planId));
+      showSuccess('プランを削除しました');
+    } catch (err: any) {
+      console.error('Failed to delete plan:', err);
+      showError(err.detail || 'プランの削除に失敗しました');
+    }
+  };
+
+  // Bulk Delete
+  const handleBulkDelete = async () => {
+    const targets = plansList.filter(p => selectedIds.includes(p.id));
+    const favorites = targets.filter(p => p.isFavorite);
+    const deletables = targets.filter(p => !p.isFavorite);
+
+    if (favorites.length > 0) {
+      showWarning(`${favorites.length}件のお気に入りプランが含まれているため、それらはスキップされます`);
+    }
+
+    if (deletables.length === 0) {
+      if (favorites.length > 0) return;
+      showWarning('削除対象が選択されていません');
+      return;
+    }
+
+    if (!window.confirm(`${deletables.length}件のプランを削除しますか？\nこの操作は取り消せません。`)) {
+      return;
+    }
+
+    try {
+      await Promise.all(deletables.map(p => planApi.deletePlan(p.id)));
+
+      setPlansList(prev => prev.filter(p => !selectedIds.includes(p.id) || (p.isFavorite && selectedIds.includes(p.id))));
+      setSelectedIds([]);
+      setIsSelectionMode(false);
+      showSuccess(`${deletables.length}件のプランを削除しました`);
+    } catch (err) {
+      console.error('Bulk delete failed:', err);
+      showError('一部のプランの削除に失敗しました');
+      const fetched = await planApi.getPlans();
+      setPlansList(fetched);
+    }
+  };
+  
+  // Bulk Move
+  const handleBulkMove = async () => {
+    if (selectedIds.length === 0) return;
+    
+    try {
+      const folderId = targetMoveFolderId === 'root' ? null : targetMoveFolderId;
+      await Promise.all(selectedIds.map(id => planApi.updatePlan(id, { folder_id: folderId })));
+      
+      // Update local state
+      setPlansList(prev => prev.map(p => selectedIds.includes(p.id) ? { ...p, folderId: folderId || undefined } : p));
+      
+      setSelectedIds([]);
+      setIsSelectionMode(false);
+      setIsMoveModalOpen(false);
+      showSuccess('プランを移動しました');
+    } catch (err) {
+      console.error('Move failed:', err);
+      showError('移動に失敗しました');
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-8 py-10">
+        <div className="flex justify-center items-center min-h-[400px]">
+          <div className="text-center">
+            <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-text-muted">プランを読み込み中...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error && !AppConfig.IS_DEMO_MODE) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-8 py-10">
+        <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-center">
+          <p className="text-red-600 font-bold mb-2">エラーが発生しました</p>
+          <p className="text-red-500 text-sm">{error}</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 sm:px-8 py-10 pb-32">
+      <div className="flex justify-between items-center mb-8">
+        <h1 className="text-4xl font-black">あなたの旅行プラン</h1>
+        <div className="flex gap-2">
+          {isSelectionMode ? (
+            <div className="flex gap-2">
+              <button
+                onClick={toggleSelectAll}
+                className="px-4 py-2 text-sm font-bold text-primary bg-primary/10 rounded-full hover:bg-primary/20 transition-colors"
+              >
+                {selectedIds.length === displayPlans.length && displayPlans.length > 0 ? '全解除' : '全選択'}
+              </button>
+              <button
+                onClick={toggleSelectionMode}
+                className="px-4 py-2 text-sm font-bold text-text-muted bg-gray-100 rounded-full hover:bg-gray-200 transition-colors"
+              >
+                完了
+              </button>
+            </div>
+          ) : (
+            displayPlans.length > 0 && (
+              <button
+                onClick={toggleSelectionMode}
+                className="px-4 py-2 text-sm font-bold text-text-muted bg-gray-100 rounded-full hover:bg-gray-200 transition-colors flex items-center gap-1"
+              >
+                <span className="material-symbols-outlined text-lg">checklist</span> 選択
+              </button>
+            )
+          )}
+        </div>
+      </div>
+
+      <div className="flex gap-8 items-start">
+        {/* Sidebar: Folder Tree */}
+        <div className="w-64 flex-shrink-0 sticky top-4 hidden md:block" style={{ height: 'calc(100vh - 120px)' }}>
+             <FolderTree 
+                folders={folders} 
+                selectedFolderId={selectedFolderId} 
+                onSelect={setSelectedFolderId} 
+                onUpdate={fetchFolders}
+             />
+        </div>
+
+        {/* Main Content */}
+        <div className="flex-1">
+            {displayPlans.length === 0 ? (
+                <div className="text-center py-20 bg-gray-50 rounded-2xl border border-dashed border-gray-300">
+                <p className="text-text-muted text-lg mb-4">プランがありません</p>
+                {selectedFolderId === null && (
+                    <button
+                        onClick={() => onNavigate('/create')}
+                        className="bg-primary text-white px-6 py-3 rounded-full font-bold shadow-lg hover:opacity-90 transition-opacity"
+                    >
+                        プランを作成する
+                    </button>
+                )}
+                </div>
+            ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                {displayPlans.map((plan) => {
+                    const isSelected = selectedIds.includes(plan.id);
+                    return (
+                    <div
+                        key={plan.id}
+                        onClick={() => isSelectionMode ? toggleSelection(plan.id) : onNavigate(`/plan/${plan.id}`)}
+                        className={`group bg-white rounded-xl overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-300 cursor-pointer border relative ${isSelected ? 'ring-4 ring-primary ring-offset-2 border-primary' : 'border-transparent hover:border-primary/20 hover:-translate-y-1'}`}
+                    >
+                        <div className="relative aspect-[4/3] overflow-hidden">
+                        <img
+                            src={plan.thumbnail}
+                            alt={plan.title}
+                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+
+                        {/* Selection Checkbox Overlay */}
+                        {isSelectionMode && (
+                            <div className={`absolute inset-0 bg-black/10 z-30 flex items-center justify-center transition-opacity ${isSelected ? 'opacity-100' : 'opacity-0 hover:opacity-100'}`}>
+                            <div className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${isSelected ? 'bg-primary text-white scale-100' : 'bg-white/80 text-gray-400 scale-90'}`}>
+                                <span className="material-symbols-outlined text-3xl">check</span>
+                            </div>
+                            </div>
+                        )}
+
+                        {/* Favorite Button (Top Left) */}
+                        <button
+                            onClick={(e) => handleToggleFavorite(e, plan)}
+                            className={`absolute top-2 left-2 w-8 h-8 rounded-full flex items-center justify-center transition-all z-20 ${plan.isFavorite ? 'bg-yellow-400 text-white shadow-md' : 'bg-black/30 text-white/70 hover:bg-black/50 hover:text-white'}`}
+                            title={plan.isFavorite ? "お気に入りから削除" : "お気に入りに追加"}
+                        >
+                            <span className="material-symbols-outlined text-lg fill">{plan.isFavorite ? 'star' : 'star_border'}</span>
+                        </button>
+
+                        {/* Delete Button (Top Right) */}
+                        {!isSelectionMode && (
+                           <button
+                             onClick={(e) => handleDeletePlan(e, plan.id)}
+                             className={`absolute top-2 right-2 w-8 h-8 rounded-full bg-black/40 text-white flex items-center justify-center hover:bg-red-500 transition-colors z-20 opacity-0 group-hover:opacity-100 md:opacity-0 md:group-hover:opacity-100 opacity-100 ${plan.isFavorite ? 'hidden' : ''}`}
+                             title="プランを削除"
+                           >
+                              <span className="material-symbols-outlined text-sm">delete</span>
+                           </button>
+                        )}
+
+                        <div className="absolute bottom-3 right-3 flex gap-2 text-xs text-white font-medium">
+                            <span className="bg-black/30 backdrop-blur-sm px-2 py-1 rounded-full flex items-center gap-1">
+                                <span className="material-symbols-outlined text-sm">calendar_month</span> {plan.days}日間
+                            </span>
+                            <span className="bg-black/30 backdrop-blur-sm px-2 py-1 rounded-full flex items-center gap-1">
+                                <span className="material-symbols-outlined text-sm">group</span> {plan.people}名
+                            </span>
+                        </div>
+                        </div>
+                        <div className="p-4 flex flex-col gap-2">
+                        <h3 className="text-lg font-bold leading-tight group-hover:text-primary transition-colors flex items-start gap-1">
+                            {plan.title}
+                            {plan.isFavorite && <span className="material-symbols-outlined text-yellow-500 text-base fill">star</span>}
+                        </h3>
+                        <div className="flex justify-between items-baseline mt-2">
+                            <div className="flex items-center gap-1 text-primary font-bold">
+                            <span className="material-symbols-outlined">payments</span>
+                            ¥{plan.budget.toLocaleString()}
+                            </div>
+                            <span className="text-xs text-text-muted">{plan.createdAt}作成</span>
+                        </div>
+                        </div>
+                    </div>
+                    );
+                })}
+                </div>
+            )}
+        </div>
+      </div>
+
+      {/* Bulk Action Bar */}
+      {isSelectionMode && selectedIds.length > 0 && (
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-gray-900 text-white pl-6 pr-2 py-2 rounded-full shadow-2xl flex items-center gap-4 z-50 animate-bounce-in border border-gray-700">
+          <div className="flex flex-col border-r border-gray-700 pr-4">
+            <span className="font-bold text-sm">{selectedIds.length}件選択中</span>
+          </div>
+          
+          <button
+            onClick={() => {
+                setTargetMoveFolderId('');
+                setIsMoveModalOpen(true);
+            }}
+            className="hover:bg-gray-700 px-4 py-2 rounded-full font-bold text-sm transition-colors flex items-center gap-2"
+          >
+             <span className="material-symbols-outlined">drive_file_move</span>
+             移動
+          </button>
+          
+          <button
+            onClick={handleBulkDelete}
+            className="bg-red-500 hover:bg-red-600 text-white px-6 py-2 rounded-full font-bold text-sm shadow-lg transition-all flex items-center gap-2"
+          >
+            <span className="material-symbols-outlined">delete</span>
+            削除
+          </button>
+        </div>
+      )}
+      
+      {/* Move Folder Modal */}
+      {isMoveModalOpen && (
+        <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl animate-fade-in-up">
+                <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+                    <span className="material-symbols-outlined text-primary">folder_open</span>
+                    移動先のフォルダを選択
+                </h3>
+                <div className="mb-6">
+                    <select
+                        className="w-full p-3 border border-gray-300 rounded-xl bg-gray-50 focus:ring-2 focus:ring-primary outline-none"
+                        value={targetMoveFolderId}
+                        onChange={(e) => setTargetMoveFolderId(e.target.value)}
+                    >
+                        <option value="" disabled>フォルダを選択してください</option>
+                        <option value="root">すべてのプラン (フォルダなし)</option>
+                        {folders.map(f => (
+                            <option key={f.id} value={f.id}>{f.name}</option>
+                        ))}
+                    </select>
+                </div>
+                <div className="flex gap-3 justify-end">
+                    <button
+                        onClick={() => setIsMoveModalOpen(false)}
+                        className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg font-bold"
+                    >
+                        キャンセル
+                    </button>
+                    <button
+                        onClick={handleBulkMove}
+                        disabled={!targetMoveFolderId}
+                        className="px-6 py-2 bg-primary text-white rounded-full font-bold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 transition-all"
+                    >
+                        移動する
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
+
+      <div className="fixed bottom-8 right-8 md:hidden">
+        <button
+          onClick={() => onNavigate('/create')}
+          className="w-14 h-14 bg-primary text-white rounded-full shadow-lg flex items-center justify-center"
+        >
+          <span className="material-symbols-outlined text-3xl">add</span>
+        </button>
+      </div>
+    </div>
+  );
+};

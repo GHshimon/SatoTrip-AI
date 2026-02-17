@@ -1,0 +1,27 @@
+# Python 3.8以上が必要です
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+sqlalchemy>=2.0.0
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+python-dotenv>=1.0.1
+pyjwt>=2.8.0
+bcrypt>=4.0.0
+python-multipart>=0.0.6
+google-generativeai
+requests>=2.31.0
+
+# データ収集機能用
+beautifulsoup4>=4.12.0
+opencage>=2.2.0
+google-api-python-client>=2.0.0
+feedparser>=6.0.10
+
+# プランエクスポート機能用
+reportlab>=4.0.0
+icalendar>=5.0.0
+Pillow>=10.0.0
+
+# 決済機能用
+stripe>=7.0.0
+
