@@ -13,6 +13,7 @@ class SpotBase(BaseModel):
     name: str
     description: Optional[str] = None
     area: Optional[str] = None
+    address: Optional[str] = None
     category: Optional[str] = None
     duration_minutes: Optional[int] = None
     rating: Optional[float] = None
@@ -21,6 +22,10 @@ class SpotBase(BaseModel):
     tags: Optional[Union[List[str], List[Dict[str, Any]], List[Tag]]] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
+    place_id: Optional[str] = None
+    phone: Optional[str] = None
+    website: Optional[str] = None
+    source_videos: Optional[List[Dict[str, Any]]] = None
     
     @field_validator('tags', mode='before')
     @classmethod
@@ -47,6 +52,7 @@ class SpotUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     area: Optional[str] = None
+    address: Optional[str] = None
     category: Optional[str] = None
     duration_minutes: Optional[int] = None
     rating: Optional[float] = None
@@ -55,6 +61,10 @@ class SpotUpdate(BaseModel):
     tags: Optional[Union[List[str], List[Dict[str, Any]], List[Tag]]] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
+    place_id: Optional[str] = None
+    phone: Optional[str] = None
+    website: Optional[str] = None
+    source_videos: Optional[List[Dict[str, Any]]] = None
     
     @field_validator('tags', mode='before')
     @classmethod

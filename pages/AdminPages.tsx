@@ -520,11 +520,15 @@ export const AdminSpots: React.FC = () => {
         name: updateData.name,
         description: updateData.description,
         area: updateData.area,
+        address: updateData.address,
         category: updateData.category,
         image: updateData.image,
         rating: updateData.rating,
         price: updateData.price,
         duration_minutes: updateData.durationMinutes,
+        place_id: updateData.placeId,
+        phone: updateData.phone,
+        website: updateData.website,
       };
 
       if (updateData.location) {
@@ -562,6 +566,7 @@ export const AdminSpots: React.FC = () => {
         name: researchResult.name || editForm.name,
         description: researchResult.description || editForm.description,
         area: researchResult.area || editForm.area,
+        address: (researchResult as any).address || editForm.address,
         category: researchResult.category as any || editForm.category,
         image: researchResult.image || editForm.image,
         price: researchResult.price || editForm.price,
@@ -1357,6 +1362,17 @@ export const AdminSpots: React.FC = () => {
                   />
                 </div>
 
+                <div className="col-span-1 md:col-span-2">
+                  <label className="block text-sm font-bold text-text-muted mb-1">住所</label>
+                  <input
+                    type="text"
+                    className="w-full p-2 border border-gray-300 rounded-lg text-sm"
+                    placeholder="例: 鹿児島県鹿児島市東千石町6-28"
+                    value={editForm.address || ''}
+                    onChange={e => setEditForm({ ...editForm, address: e.target.value })}
+                  />
+                </div>
+
                 <div>
                   <label className="block text-sm font-bold text-text-muted mb-1">カテゴリ</label>
                   <select
@@ -1424,8 +1440,18 @@ export const AdminSpots: React.FC = () => {
                       <span className="material-symbols-outlined text-sm">open_in_new</span>
                       Googleマップで位置を確認 ({editForm.location.lat}, {editForm.location.lng})
                     </a>
+                  ) : editForm.address ? (
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(editForm.address)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center gap-1 text-sm text-blue-600 hover:underline"
+                    >
+                      <span className="material-symbols-outlined text-sm">open_in_new</span>
+                      住所でGoogleマップを開く
+                    </a>
                   ) : (
-                    <span className="text-sm text-gray-400">緯度経度が入力されていません</span>
+                    <span className="text-sm text-gray-400">住所または緯度経度を入力すると地図リンクを表示します</span>
                   )}
                 </div>
 

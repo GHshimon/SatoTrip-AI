@@ -16,6 +16,7 @@ export interface SpotCreateRequest {
   name: string;
   description?: string;
   area?: string;
+  address?: string;
   category?: string;
   duration_minutes?: number;
   rating?: number;
@@ -24,12 +25,16 @@ export interface SpotCreateRequest {
   tags?: string[];
   latitude?: number;
   longitude?: number;
+  place_id?: string;
+  phone?: string;
+  website?: string;
 }
 
 export interface SpotUpdateRequest {
   name?: string;
   description?: string;
   area?: string;
+  address?: string;
   category?: string;
   duration_minutes?: number;
   rating?: number;
@@ -38,6 +43,9 @@ export interface SpotUpdateRequest {
   tags?: string[];
   latitude?: number;
   longitude?: number;
+  place_id?: string;
+  phone?: string;
+  website?: string;
 }
 
 /**
@@ -106,6 +114,7 @@ export async function researchSpot(spotName: string): Promise<Partial<SpotCreate
   return {
     name: response.name,
     area: response.area,
+    address: response.address,
     category: response.category,
     description: response.description,
     price: response.price,
@@ -240,6 +249,7 @@ function transformSpotResponse(data: any): Spot {
     name: data.name,
     description: data.description || '',
     area: data.area || '',
+    address: data.address || undefined,
     category: data.category as any || 'Culture',
     durationMinutes: data.duration_minutes || 60,
     rating: data.rating || 0,
@@ -249,6 +259,10 @@ function transformSpotResponse(data: any): Spot {
     location: data.latitude && data.longitude
       ? { lat: data.latitude, lng: data.longitude }
       : undefined,
+    placeId: data.place_id || undefined,
+    phone: data.phone || undefined,
+    website: data.website || undefined,
+    sourceVideos: data.source_videos || undefined,
     created_at: data.created_at,
     updated_at: data.updated_at,
   };

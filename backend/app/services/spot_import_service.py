@@ -6,13 +6,178 @@ import json
 import re
 import csv
 import uuid
+import time
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
+from app.config import settings
 from app.models.spot import Spot
 from app.utils.error_handler import log_error
 from app.utils.debug_logger import log_debug_step
 from app.utils.tag_normalizer import normalize_tags, tags_to_dict_list, TagSource
+
+
+# description の最大長（マージ時の暴走を防ぐ）
+_DESCRIPTION_MAX_LEN = 600
+
+# AI / Places の戻り値で「上書きする」と判定する最小文字数
+_DESCRIPTION_GOOD_ENOUGH_LEN = 80
+
+
+def _coerce_float(value: Any) -> Optional[float]:
+    """安全に float 変換"""
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def enrich_spot_data(
+    spot_data: Dict[str, Any],
+    *,
+    prefecture: Optional[str] = None,
+    source_video: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """
+    動画由来の粗い spot_data を Gemini + Places で補強する。
+
+    優先度:
+      1. Google Places の住所/緯度経度/画像/電話/サイト/レーティング/place_id
+      2. Gemini research_spot_info の description / tags / category / duration / address(補)
+      3. 動画由来の値（description/tags/items/recommend など）
+
+    引数の ``spot_data`` は破壊的に書き換えず、コピーを返す。
+    """
+    enriched = dict(spot_data)
+
+    name = (enriched.get("name") or "").strip()
+    if not name:
+        return enriched
+
+    area = enriched.get("area") or ""
+    pref = prefecture or ""
+
+    # 1) Gemini で店舗単位の説明・タグ・カテゴリ・滞在時間を補強
+    if settings.SPOT_ENRICH_WITH_GEMINI and settings.GEMINI_API_KEY:
+        try:
+            from app.services.gemini_service import research_spot_info
+
+            research = research_spot_info(name, area=area, prefecture=pref)
+            if research and not research.get("error"):
+                research_desc = (research.get("description") or "").strip()
+                if research_desc:
+                    enriched["description"] = research_desc[:_DESCRIPTION_MAX_LEN]
+
+                research_category = research.get("category")
+                if research_category and not enriched.get("category"):
+                    enriched["category"] = research_category
+
+                research_duration = research.get("duration_minutes")
+                if isinstance(research_duration, (int, float)) and research_duration > 0:
+                    enriched["duration_minutes"] = int(research_duration)
+
+                research_tags = research.get("tags")
+                if research_tags:
+                    enriched["tags"] = research_tags
+
+                research_address = (research.get("address") or "").strip()
+                if research_address:
+                    enriched["address"] = research_address
+
+                research_area = (research.get("area") or "").strip()
+                if research_area and not enriched.get("area"):
+                    enriched["area"] = research_area
+
+                research_price = research.get("price")
+                if isinstance(research_price, (int, float)) and research_price > 0 and not enriched.get("price"):
+                    enriched["price"] = float(research_price)
+            elif research and research.get("error"):
+                log_error(
+                    "SPOT_ENRICH_GEMINI_ERROR",
+                    f"research_spot_info エラー ({name}): {research.get('message')}",
+                    {"name": name, "error_type": research.get("error_type")},
+                )
+        except Exception as e:
+            log_error("SPOT_ENRICH_GEMINI_EXCEPTION", f"Gemini エンリッチ例外 ({name}): {e}")
+        if settings.SPOT_ENRICH_DELAY_SEC:
+            time.sleep(settings.SPOT_ENRICH_DELAY_SEC)
+
+    # 2) Google Places で住所・緯度経度・画像・電話・URL を取得して優先反映
+    if settings.SPOT_ENRICH_WITH_PLACES and settings.GOOGLE_MAPS_API_KEY:
+        try:
+            from app.services.places_service import enrich_spot_with_places
+
+            places_info = enrich_spot_with_places(
+                name=name,
+                area=enriched.get("area"),
+                prefecture=pref or None,
+                category=enriched.get("category"),
+            )
+            if places_info:
+                if places_info.get("place_id"):
+                    enriched["place_id"] = places_info["place_id"]
+                if places_info.get("address"):
+                    enriched["address"] = places_info["address"]
+                lat = _coerce_float(places_info.get("latitude"))
+                lng = _coerce_float(places_info.get("longitude"))
+                if lat is not None:
+                    enriched["latitude"] = lat
+                if lng is not None:
+                    enriched["longitude"] = lng
+                if places_info.get("phone"):
+                    enriched["phone"] = places_info["phone"]
+                if places_info.get("website"):
+                    enriched["website"] = places_info["website"]
+                if places_info.get("rating") is not None:
+                    enriched["rating"] = float(places_info["rating"])
+                if places_info.get("price") is not None and not enriched.get("price"):
+                    enriched["price"] = float(places_info["price"])
+                if places_info.get("image") and not enriched.get("image"):
+                    enriched["image"] = places_info["image"]
+                # Places の正規名称が大きく違う場合は採用しない（誤同定防止）
+                # 名前は呼び出し元で控えた値を尊重
+        except Exception as e:
+            log_error("SPOT_ENRICH_PLACES_EXCEPTION", f"Places エンリッチ例外 ({name}): {e}")
+        if settings.SPOT_ENRICH_DELAY_SEC:
+            time.sleep(settings.SPOT_ENRICH_DELAY_SEC)
+
+    # 3) ソース動画情報を保持
+    if source_video:
+        existing_videos = enriched.get("source_videos") or []
+        if not isinstance(existing_videos, list):
+            existing_videos = []
+        # 同一 URL は重複追加しない
+        urls = {v.get("url") for v in existing_videos if isinstance(v, dict)}
+        if source_video.get("url") not in urls:
+            existing_videos.append(source_video)
+        enriched["source_videos"] = existing_videos
+
+    return enriched
+
+
+def find_existing_spot(db: Session, spot_data: Dict[str, Any]) -> Optional[Spot]:
+    """
+    place_id 優先で既存スポットを検索。なければ name+area で互換検索。
+    """
+    place_id = spot_data.get("place_id")
+    if place_id:
+        existing = db.query(Spot).filter(Spot.place_id == place_id).first()
+        if existing:
+            return existing
+
+    name = spot_data.get("name")
+    area = spot_data.get("area")
+    if name and area:
+        return (
+            db.query(Spot)
+            .filter(Spot.name == name, Spot.area == area)
+            .first()
+        )
+    if name:
+        return db.query(Spot).filter(Spot.name == name).first()
+    return None
 
 
 def parse_gemini_summary(summary_text: str) -> List[Dict[str, Any]]:
@@ -133,14 +298,37 @@ def merge_spot_data(existing_spot: Spot, new_spot_data: Dict[str, Any], target_c
         new_spot_data: 新しいSpotデータ
         target_category: ターゲットカテゴリ（指定されている場合、既存カテゴリを保護）
     """
-    # description: 既存 + " | " + 新しい（重複除去）
-    existing_desc = existing_spot.description or ""
-    new_desc = new_spot_data.get("description", "")
+    # description: 既存が十分な長さなら追記しない。短い場合のみ最大長まで連結。
+    existing_desc = (existing_spot.description or "").strip()
+    new_desc = (new_spot_data.get("description") or "").strip()
     if new_desc and new_desc not in existing_desc:
-        if existing_desc:
-            existing_spot.description = f"{existing_desc} | {new_desc}"
-        else:
-            existing_spot.description = new_desc
+        if not existing_desc:
+            existing_spot.description = new_desc[:_DESCRIPTION_MAX_LEN]
+        elif len(existing_desc) < _DESCRIPTION_GOOD_ENOUGH_LEN:
+            combined = f"{existing_desc} | {new_desc}".strip(" |")
+            existing_spot.description = combined[:_DESCRIPTION_MAX_LEN]
+        # 既存が十分長い場合は新規 description を捨てる（無限肥大防止）
+
+    # 住所/place_id/電話/サイト: 既存が空なら新規で埋める
+    if not getattr(existing_spot, "address", None) and new_spot_data.get("address"):
+        existing_spot.address = new_spot_data["address"]
+    if not getattr(existing_spot, "place_id", None) and new_spot_data.get("place_id"):
+        existing_spot.place_id = new_spot_data["place_id"]
+    if not getattr(existing_spot, "phone", None) and new_spot_data.get("phone"):
+        existing_spot.phone = new_spot_data["phone"]
+    if not getattr(existing_spot, "website", None) and new_spot_data.get("website"):
+        existing_spot.website = new_spot_data["website"]
+
+    # source_videos は配列追記
+    new_videos = new_spot_data.get("source_videos") or []
+    if new_videos:
+        existing_videos = list(getattr(existing_spot, "source_videos", None) or [])
+        urls = {v.get("url") for v in existing_videos if isinstance(v, dict)}
+        for v in new_videos:
+            if isinstance(v, dict) and v.get("url") not in urls:
+                existing_videos.append(v)
+                urls.add(v.get("url"))
+        existing_spot.source_videos = existing_videos
     
     # tags: 既存タグと新しいタグを統合（構造化タグ対応、重複除去）
     existing_tags = existing_spot.tags or []
@@ -160,14 +348,16 @@ def merge_spot_data(existing_spot: Spot, new_spot_data: Dict[str, Any], target_c
     merged_tags = tags_to_dict_list(existing_structured) if existing_structured else None
     existing_spot.tags = merged_tags
     
-    # image: 既存がない場合のみ新しい画像を設定
-    if not existing_spot.image and new_spot_data.get("image"):
-        existing_spot.image = new_spot_data["image"]
-    
+    # image: 既存が空 or placehold ダミーなら新しい画像で上書き
+    new_image = new_spot_data.get("image")
+    existing_image = existing_spot.image or ""
+    if new_image and (not existing_image or "placehold.co" in existing_image):
+        existing_spot.image = new_image
+
     # latitude/longitude: 既存がない場合のみ新しい位置情報を設定
-    if not existing_spot.latitude and new_spot_data.get("latitude"):
+    if not existing_spot.latitude and new_spot_data.get("latitude") is not None:
         existing_spot.latitude = new_spot_data["latitude"]
-    if not existing_spot.longitude and new_spot_data.get("longitude"):
+    if not existing_spot.longitude and new_spot_data.get("longitude") is not None:
         existing_spot.longitude = new_spot_data["longitude"]
     
     # category: target_categoryが指定されている場合、既存カテゴリを保護（変更しない）
@@ -367,9 +557,24 @@ def import_spots_from_youtube_data(
                     "longitude": None
                 }
                 
-                # Spotデータを作成
+                # Spotデータを作成（動画由来の粗い初期値）
                 spot_data = create_spot_from_data(spot_place_data, source_url)
-                
+
+                # 動画情報をソースとして保持
+                source_video = {
+                    "url": source_url,
+                    "title": video_title,
+                    "keyword": entry.get("keyword"),
+                    "imported_at": datetime.now().isoformat(),
+                }
+
+                # Gemini + Places で店舗単位に補強（精度の高い情報で上書き）
+                spot_data = enrich_spot_data(
+                    spot_data,
+                    prefecture=prefecture,
+                    source_video=source_video,
+                )
+
                 # カテゴリマッピング: 日本語カテゴリ名を英語カテゴリ名に変換
                 category_map = {
                     "宿泊": "Hotel",
@@ -415,42 +620,12 @@ def import_spots_from_youtube_data(
                         f.write(json.dumps({"location":"spot_import_service.py:380","message":"target_category not provided, skipping overwrite","data":{"place_name":place_name,"original_category":original_category,"target_category":target_category},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"F"},ensure_ascii=False)+'\n')
                     # #endregion
                 
-                # #region agent log
-                import json
-                import time
-                with open(r'c:\projects\SatoTrip-AI\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                    f.write(json.dumps({"location":"spot_import_service.py:333","message":"checking duplicate before query","data":{"place_name":place_name,"spot_name":spot_data["name"],"spot_area":spot_data.get("area"),"spot_category":spot_data.get("category"),"target_category":target_category,"target_category_en":target_category_en,"theme":place_data.get("theme","")},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"E"},ensure_ascii=False)+'\n')
-                # #endregion
-                
-                # 重複チェック（名前、エリア、カテゴリで判定）
-                # target_categoryが指定されている場合は、カテゴリも一致する場合のみ重複と判定
-                if target_category_en:
-                    existing_spot = db.query(Spot).filter(
-                        Spot.name == spot_data["name"],
-                        Spot.area == spot_data["area"],
-                        Spot.category == target_category_en
-                    ).first()
-                    # エリア名が一致しない場合、名前とカテゴリのみで検索（エリア名の不一致を確認）
-                    if not existing_spot:
-                        existing_spot_by_name_category = db.query(Spot).filter(
-                            Spot.name == spot_data["name"],
-                            Spot.category == target_category_en
-                        ).first()
-                        # #region agent log
-                        if existing_spot_by_name_category:
-                            with open(r'c:\projects\SatoTrip-AI\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                                f.write(json.dumps({"location":"spot_import_service.py:432","message":"duplicate found by name and category but area mismatch","data":{"spot_name":spot_data["name"],"spot_area":spot_data.get("area"),"existing_spot_area":existing_spot_by_name_category.area,"category":spot_data.get("category"),"target_category":target_category},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"H"},ensure_ascii=False)+'\n')
-                        # #endregion
-                else:
-                    existing_spot = db.query(Spot).filter(
-                        Spot.name == spot_data["name"],
-                        Spot.area == spot_data["area"]
-                    ).first()
-                
-                # #region agent log
-                with open(r'c:\projects\SatoTrip-AI\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                    f.write(json.dumps({"location":"spot_import_service.py:345","message":"duplicate check result","data":{"spot_name":spot_data["name"],"spot_area":spot_data.get("area"),"category":spot_data.get("category"),"target_category":target_category,"existing_spot_found":existing_spot is not None,"existing_spot_id":existing_spot.id if existing_spot else None,"existing_spot_category":existing_spot.category if existing_spot else None},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"E"},ensure_ascii=False)+'\n')
-                # #endregion
+                # 重複チェック: place_id 優先、なければ name+area
+                existing_spot = find_existing_spot(db, spot_data)
+
+                # target_category 指定時、見つかった既存スポットのカテゴリが target と異なる場合は別スポット扱い
+                if existing_spot and target_category_en and existing_spot.category != target_category_en and not spot_data.get("place_id"):
+                    existing_spot = None
                 
                 if existing_spot:
                     # 重複が見つかった場合、マージする
@@ -503,6 +678,7 @@ def import_spots_from_youtube_data(
                         name=spot_data["name"],
                         description=spot_data.get("description"),
                         area=spot_data.get("area"),
+                        address=spot_data.get("address"),
                         category=spot_data.get("category"),
                         duration_minutes=spot_data.get("duration_minutes"),
                         rating=spot_data.get("rating"),
@@ -510,13 +686,13 @@ def import_spots_from_youtube_data(
                         price=spot_data.get("price"),
                         tags=spot_data.get("tags"),
                         latitude=spot_data.get("latitude"),
-                        longitude=spot_data.get("longitude")
+                        longitude=spot_data.get("longitude"),
+                        place_id=spot_data.get("place_id"),
+                        phone=spot_data.get("phone"),
+                        website=spot_data.get("website"),
+                        source_videos=spot_data.get("source_videos"),
                     )
                     db.add(spot)
-                    # #region agent log
-                    with open(r'c:\projects\SatoTrip-AI\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                        f.write(json_module.dumps({"location":"spot_import_service.py:515","message":"Before db.commit","data":{"spot_name":place_name,"spot_id_before_commit":spot.id if hasattr(spot, 'id') else None},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"I"},ensure_ascii=False)+'\n')
-                    # #endregion
                     db.commit()
                     db.refresh(spot)
                     # #region agent log
@@ -612,6 +788,29 @@ def add_location_to_existing_spots(
         処理結果（成功件数、失敗件数等）
     """
     from app.services.geocoding_service import get_geo
+
+    # Places API で事前補完したうえでここに来るケースが多いため、
+    # OpenCage キー未設定時はエラー連発を避けて安全にスキップする。
+    if not settings.OPENCAGE_API_KEY:
+        total = 0
+        try:
+            if spot_ids:
+                total = db.query(Spot).filter(Spot.id.in_(spot_ids)).count()
+            else:
+                total = db.query(Spot).count()
+        except Exception:
+            total = len(spot_ids) if spot_ids else 0
+        log_error(
+            "LOCATION_ASSIGNMENT_SKIPPED_NO_OPENCAGE_KEY",
+            "OPENCAGE_API_KEY 未設定のため OpenCage 補完をスキップしました",
+            {"prefecture": prefecture, "target_count": total},
+        )
+        return {
+            "updated": 0,
+            "errors": 0,
+            "skipped": total,
+            "total_processed": total,
+        }
     
     # 対象Spotを取得
     if spot_ids:

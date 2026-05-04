@@ -25,6 +25,7 @@ def create_spot(db: Session, spot_data: dict) -> Spot:
         name=spot_data["name"],
         description=spot_data.get("description"),
         area=spot_data.get("area"),
+        address=spot_data.get("address"),
         category=spot_data.get("category"),
         duration_minutes=spot_data.get("duration_minutes"),
         rating=spot_data.get("rating"),
@@ -32,7 +33,11 @@ def create_spot(db: Session, spot_data: dict) -> Spot:
         price=spot_data.get("price"),
         tags=spot_data.get("tags"),
         latitude=spot_data.get("latitude"),
-        longitude=spot_data.get("longitude")
+        longitude=spot_data.get("longitude"),
+        place_id=spot_data.get("place_id"),
+        phone=spot_data.get("phone"),
+        website=spot_data.get("website"),
+        source_videos=spot_data.get("source_videos"),
     )
     db.add(spot)
     db.commit()

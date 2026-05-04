@@ -145,32 +145,66 @@ async def create_spot_endpoint(
     current_user: User = Depends(get_current_admin_user),
     db: Session = Depends(get_db)
 ):
-    """スポット作成（管理者のみ）"""
+    """スポット作成（管理者のみ）
+
+    Gemini と Google Places で住所/緯度経度/画像/タグ等を自動補完する。
+    フォーム入力値は補強結果より優先される（既に値があるフィールドは上書きしない）。
+    """
+    from app.services.spot_import_service import enrich_spot_data, find_existing_spot
+
     spot_dict = spot_data.model_dump()
-    
-    # duration_minutesが未指定の場合はAIで調査
+    spot_name = (spot_dict.get("name") or "").strip()
+
+    if spot_name:
+        try:
+            enriched = enrich_spot_data(
+                {
+                    "name": spot_name,
+                    "area": spot_dict.get("area"),
+                    "category": spot_dict.get("category"),
+                    "description": spot_dict.get("description"),
+                    "duration_minutes": spot_dict.get("duration_minutes"),
+                    "rating": spot_dict.get("rating"),
+                    "image": spot_dict.get("image"),
+                    "price": spot_dict.get("price"),
+                    "tags": spot_dict.get("tags"),
+                    "latitude": spot_dict.get("latitude"),
+                    "longitude": spot_dict.get("longitude"),
+                    "address": spot_dict.get("address"),
+                },
+                prefecture=None,
+                source_video=None,
+            )
+            # ユーザー入力を優先（None / 空のときだけ enriched を採用）
+            for key in (
+                "description", "area", "address", "category", "duration_minutes",
+                "rating", "image", "price", "tags", "latitude", "longitude",
+                "place_id", "phone", "website",
+            ):
+                if not spot_dict.get(key) and enriched.get(key) is not None and enriched.get(key) != "":
+                    spot_dict[key] = enriched[key]
+
+            # place_id があるなら重複統合
+            existing = find_existing_spot(db, spot_dict)
+            if existing:
+                from app.services.spot_import_service import merge_spot_data
+                merge_spot_data(existing, spot_dict)
+                # ユーザー編集系フィールドも更新（明示入力された値）
+                for k in ("name", "category", "duration_minutes", "rating", "price"):
+                    v = spot_dict.get(k)
+                    if v not in (None, ""):
+                        setattr(existing, k, v)
+                db.commit()
+                db.refresh(existing)
+                return existing
+        except Exception as e:
+            from app.utils.error_handler import log_error
+            log_error("SPOT_CREATE_ENRICH_ERROR", f"スポット作成時エンリッチエラー: {str(e)}", {"spot_name": spot_name})
+
+    # duration_minutes が未設定なら最低限のデフォルト
     if not spot_dict.get("duration_minutes"):
-        spot_name = spot_dict.get("name", "")
-        if spot_name:
-            try:
-                research_result = research_spot_info(spot_name)
-                if research_result and not research_result.get("error"):
-                    # 調査結果からduration_minutesを取得
-                    if "duration_minutes" in research_result:
-                        spot_dict["duration_minutes"] = research_result["duration_minutes"]
-                    # その他の情報も補完（未指定の場合のみ）
-                    if not spot_dict.get("category") and "category" in research_result:
-                        spot_dict["category"] = research_result["category"]
-                    if not spot_dict.get("description") and "description" in research_result:
-                        spot_dict["description"] = research_result["description"]
-                    if not spot_dict.get("area") and "area" in research_result:
-                        spot_dict["area"] = research_result["area"]
-            except Exception as e:
-                # AI調査失敗時はデフォルト値を使用（エラーはログに記録するが処理は続行）
-                from app.utils.error_handler import log_error
-                log_error("SPOT_DURATION_RESEARCH_ERROR", f"滞在時間調査エラー: {str(e)}", {"spot_name": spot_name})
-                spot_dict["duration_minutes"] = spot_dict.get("duration_minutes", 60)  # デフォルト値
-    
+        spot_dict["duration_minutes"] = 60
+
     spot = create_spot(db, spot_dict)
     return spot
 

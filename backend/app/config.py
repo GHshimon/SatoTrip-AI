@@ -59,9 +59,22 @@ class Settings(BaseSettings):
     # 位置情報取得で使用（オプション）
     OPENCAGE_API_KEY: str = ""
 
-    # Google Maps API設定
-    # ジオコーディングで使用（オプション）
+    # Google Maps / Places API 設定
+    # 同一の Google Cloud API キーで Places API (New) を有効化して使用
+    # 推奨: APIs & Services Library で "Places API (New)" を Enable し、
+    # キーの API restrictions に "Places API (New)" を追加（Application restrictions は None）
     GOOGLE_MAPS_API_KEY: str = ""
+
+    # スポットエンリッチ（一括追加 / 単体作成共通）
+    # ENRICH_WITH_GEMINI: 各店舗ごとに research_spot_info を呼び出して説明・タグを補強
+    # ENRICH_WITH_PLACES: Google Places API で住所・緯度経度・画像・電話・URL を補強
+    SPOT_ENRICH_WITH_GEMINI: bool = True
+    SPOT_ENRICH_WITH_PLACES: bool = True
+    SPOT_ENRICH_DELAY_SEC: float = 0.2  # API レート制御用のスリープ
+    PLACES_API_TIMEOUT_SEC: float = 10.0
+    PLACES_LANGUAGE: str = "ja"
+    PLACES_REGION: str = "jp"
+    PLACES_PHOTO_MAX_WIDTH_PX: int = 800
 
     # データ収集機能の有効/無効
     # True: データ収集機能を有効にする

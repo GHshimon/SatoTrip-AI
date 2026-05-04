@@ -529,15 +529,21 @@ def generate_plan(
         return None
 
 
-def research_spot_info(spot_name: str) -> Optional[Dict[str, Any]]:
+def research_spot_info(
+    spot_name: str,
+    area: Optional[str] = None,
+    prefecture: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
     """
     スポット名を元に詳細情報を生成する
     
     Args:
         spot_name: スポット名
+        area: 既知のエリア（市区町村・地区名など、曖昧な店名の同定に使う）
+        prefecture: 既知の都道府県名
         
     Returns:
-        JSON形式のスポット詳細情報 (name, area, category, description, price, etc.)
+        JSON形式のスポット詳細情報 (name, area, address, category, description, price, etc.)
         エラー時は {"error": True, "error_type": "...", "message": "..."} 形式の辞書を返す
     """
     if not settings.GEMINI_API_KEY:
@@ -547,13 +553,21 @@ def research_spot_info(spot_name: str) -> Optional[Dict[str, Any]]:
             "error_type": "CONFIG_ERROR",
             "message": "GEMINI_API_KEYが設定されていません"
         }
-        
+    
+    context_parts: List[str] = []
+    if prefecture:
+        context_parts.append(f"都道府県: {prefecture}")
+    if area:
+        context_parts.append(f"エリア: {area}")
+    context_block = ("\n".join(context_parts) + "\n") if context_parts else ""
+    
     prompt = f"""
 あなたは日本の観光スポットに詳しいAIアシスタントです。
 以下の観光スポットについて、データベースに登録するための詳細情報を生成してください。
 正確な情報が不明な場合は、一般的な傾向や推定値（妥当な範囲）を用いて補完してください。
 
 対象スポット: {spot_name}
+{context_block}このコンテキストに合致する**実在の店舗・施設**を特定したうえで情報を記述してください。同名異店舗が存在する場合はコンテキストに最も合致するものを採用します。
 
 【滞在時間の算出方法】
 以下のルールに従って、適切な滞在時間（分単位）を算出してください：
@@ -582,9 +596,10 @@ def research_spot_info(spot_name: str) -> Optional[Dict[str, Any]]:
 ```json
 {{
   "name": "{spot_name}",
-  "area": "都道府県または主要都市（例: 京都、東京、浅草、金沢）",
+  "area": "都道府県＋市区町村（例: 鹿児島県鹿児島市、京都府京都市東山区）",
+  "address": "実在する番地まで含む住所（推定でも可、不明な場合は空文字 \"\"）",
   "category": "History" | "Nature" | "Food" | "Shopping" | "Art" | "Relax" | "Culture" の中から最も適切なものを1つ,
-  "description": "スポットの魅力や特徴を100〜200文字程度で魅力的に記述してください。",
+  "description": "そのスポット固有の魅力や特徴を100〜200文字程度で魅力的に記述してください。同名・同ジャンルの他店舗の特徴は混ぜないでください。",
   "price": 参考価格（大人の入場料や平均予算、円単位、数値のみ、不明な場合は0）,
   "image": "https://placehold.co/600x400?text={spot_name}" (このまま出力),
   "duration_minutes": 標準滞在時間（分単位、数値。上記のルールに従って算出してください。最小15分、最大480分）,
@@ -597,6 +612,10 @@ def research_spot_info(spot_name: str) -> Optional[Dict[str, Any]]:
 - カテゴリに応じた適切なタグを選択してください（例: Foodカテゴリなら「グルメ」「美食」「レストラン」など）
 - タグは日本語で、簡潔に（2〜4文字程度）記述してください
 - ハッシュタグ記号（#）は不要です
+
+【推測の扱い】
+- 実在が確認できないスポットや、特定が困難な短い名前の場合は description を「推定情報を含みます。」で始めてください
+- 住所が分からなくても、description / category / tags は妥当な推定で埋めてください
 """
 
     try:

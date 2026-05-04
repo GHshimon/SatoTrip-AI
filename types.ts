@@ -58,6 +58,7 @@ export interface Spot {
   name: string;
   description: string;
   area: string;
+  address?: string;
   category: SpotCategory;
   durationMinutes: number;
   rating: number;
@@ -68,6 +69,10 @@ export interface Spot {
     lat: number;
     lng: number;
   };
+  placeId?: string;
+  phone?: string;
+  website?: string;
+  sourceVideos?: Array<{ url?: string; title?: string; keyword?: string; imported_at?: string }>;
   created_at?: string;  // ISO 8601形式の日時文字列
   updated_at?: string;  // ISO 8601形式の日時文字列
 }
