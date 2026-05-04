@@ -39,6 +39,7 @@ def enrich_spot_data(
     *,
     prefecture: Optional[str] = None,
     source_video: Optional[Dict[str, Any]] = None,
+    metrics: Optional[Dict[str, int]] = None,
 ) -> Dict[str, Any]:
     """
     動画由来の粗い spot_data を Gemini + Places で補強する。
@@ -61,6 +62,8 @@ def enrich_spot_data(
 
     # 1) Gemini で店舗単位の説明・タグ・カテゴリ・滞在時間を補強
     if settings.SPOT_ENRICH_WITH_GEMINI and settings.GEMINI_API_KEY:
+        if metrics is not None:
+            metrics["gemini_enrich_call_count"] = metrics.get("gemini_enrich_call_count", 0) + 1
         try:
             from app.services.gemini_service import research_spot_info
 
@@ -115,7 +118,12 @@ def enrich_spot_data(
                 prefecture=pref or None,
                 category=enriched.get("category"),
             )
+            if metrics is not None:
+                metrics["places_search_count"] = metrics.get("places_search_count", 0) + int(places_info.get("search_attempts", 0) if places_info else 1)
+                metrics["details_call_count"] = metrics.get("details_call_count", 0) + int(places_info.get("details_called", 0) if places_info else 0)
             if places_info:
+                if metrics is not None:
+                    metrics["places_hit_count"] = metrics.get("places_hit_count", 0) + 1
                 if places_info.get("place_id"):
                     enriched["place_id"] = places_info["place_id"]
                 if places_info.get("address"):
@@ -126,6 +134,8 @@ def enrich_spot_data(
                     enriched["latitude"] = lat
                 if lng is not None:
                     enriched["longitude"] = lng
+                if metrics is not None and lat is not None and lng is not None:
+                    metrics["geo_filled_count"] = metrics.get("geo_filled_count", 0) + 1
                 if places_info.get("phone"):
                     enriched["phone"] = places_info["phone"]
                 if places_info.get("website"):
@@ -138,6 +148,9 @@ def enrich_spot_data(
                     enriched["image"] = places_info["image"]
                 # Places の正規名称が大きく違う場合は採用しない（誤同定防止）
                 # 名前は呼び出し元で控えた値を尊重
+            else:
+                if metrics is not None:
+                    metrics["places_miss_count"] = metrics.get("places_miss_count", 0) + 1
         except Exception as e:
             log_error("SPOT_ENRICH_PLACES_EXCEPTION", f"Places エンリッチ例外 ({name}): {e}")
         if settings.SPOT_ENRICH_DELAY_SEC:
@@ -481,6 +494,14 @@ def import_spots_from_youtube_data(
     error_count = 0
     skipped_count = 0
     spot_ids: List[str] = []
+    kpi_metrics: Dict[str, int] = {
+        "places_search_count": 0,
+        "places_hit_count": 0,
+        "places_miss_count": 0,
+        "details_call_count": 0,
+        "gemini_enrich_call_count": 0,
+        "geo_filled_count": 0,
+    }
     
     # #region agent log
     import json as json_module
@@ -573,6 +594,7 @@ def import_spots_from_youtube_data(
                     spot_data,
                     prefecture=prefecture,
                     source_video=source_video,
+                    metrics=kpi_metrics,
                 )
 
                 # カテゴリマッピング: 日本語カテゴリ名を英語カテゴリ名に変換
@@ -748,7 +770,8 @@ def import_spots_from_youtube_data(
         "errors": error_count,
         "skipped": skipped_count,
         "total_processed": len(results),
-        "spot_ids": list(set(spot_ids))
+        "spot_ids": list(set(spot_ids)),
+        **kpi_metrics,
     }
     
     log_debug_step(

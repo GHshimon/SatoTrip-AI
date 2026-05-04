@@ -145,6 +145,13 @@ export interface BulkAddResponse {
   total_videos: number;
   location_updated?: number;
   location_errors?: number;
+  places_search_count?: number;
+  places_hit_count?: number;
+  places_miss_count?: number;
+  details_call_count?: number;
+  gemini_enrich_call_count?: number;
+  geo_filled_count?: number;
+  places_hit_rate?: number;
   error?: string;
   job_id?: string;
   job_status?: string;

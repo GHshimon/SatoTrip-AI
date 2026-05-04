@@ -136,6 +136,13 @@ class BulkAddResponse(BaseModel):
     total_videos: int
     location_updated: Optional[int] = None
     location_errors: Optional[int] = None
+    places_search_count: Optional[int] = None
+    places_hit_count: Optional[int] = None
+    places_miss_count: Optional[int] = None
+    details_call_count: Optional[int] = None
+    gemini_enrich_call_count: Optional[int] = None
+    geo_filled_count: Optional[int] = None
+    places_hit_rate: Optional[float] = None
     error: Optional[str] = None
     job_id: Optional[str] = None
     job_status: Optional[str] = None

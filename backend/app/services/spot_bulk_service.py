@@ -457,8 +457,21 @@ def bulk_add_spots_by_prefecture(
         "quota_exceeded": youtube_data.get("quota_exceeded", False),
         "processed_keywords": youtube_data.get("successful_keywords", 0),
         "failed_keywords": youtube_data.get("failed_keywords", 0),
-        "total_videos": youtube_data.get("total_videos", 0)
+        "total_videos": youtube_data.get("total_videos", 0),
+        "places_search_count": import_result.get("places_search_count", 0),
+        "places_hit_count": import_result.get("places_hit_count", 0),
+        "places_miss_count": import_result.get("places_miss_count", 0),
+        "details_call_count": import_result.get("details_call_count", 0),
+        "gemini_enrich_call_count": import_result.get("gemini_enrich_call_count", 0),
+        "geo_filled_count": import_result.get("geo_filled_count", 0),
     }
+
+    places_search_count = result.get("places_search_count", 0) or 0
+    places_hit_count = result.get("places_hit_count", 0) or 0
+    if places_search_count > 0:
+        result["places_hit_rate"] = round((places_hit_count / places_search_count) * 100.0, 2)
+    else:
+        result["places_hit_rate"] = 0.0
     
     # Gemini要約が全て失敗した場合の警告
     if result["total_videos"] == 0 and result["processed_keywords"] > 0:

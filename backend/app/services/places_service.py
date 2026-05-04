@@ -24,6 +24,7 @@ Text Search で店舗候補を絞り、Place Details で住所・緯度経度・
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
+from difflib import SequenceMatcher
 
 import requests
 
@@ -196,6 +197,87 @@ def _query_candidates(name: str, area: Optional[str], prefecture: Optional[str])
             out.append(qq)
             seen.add(qq)
     return out
+
+
+def _normalize_name(value: Optional[str]) -> str:
+    """名称比較用の簡易正規化"""
+    if not value:
+        return ""
+    s = value.strip().lower()
+    for token in ["株式会社", "(株)", "有限会社", "本店", "支店", "店", " ", "　"]:
+        s = s.replace(token, "")
+    return s
+
+
+def _name_similarity(a: Optional[str], b: Optional[str]) -> float:
+    """0.0-1.0 の名称類似度"""
+    na = _normalize_name(a)
+    nb = _normalize_name(b)
+    if not na or not nb:
+        return 0.0
+    if na == nb:
+        return 1.0
+    if na in nb or nb in na:
+        return 0.9
+    return SequenceMatcher(None, na, nb).ratio()
+
+
+def _build_candidate_score(
+    candidate: Dict[str, Any],
+    *,
+    target_name: str,
+    area: Optional[str],
+    prefecture: Optional[str],
+    category: Optional[str],
+) -> Dict[str, Any]:
+    """
+    Places候補をスコアリング（cheap-first）
+    score: 0.0-1.0
+    """
+    display_name = ((candidate.get("displayName") or {}).get("text") or "").strip()
+    formatted_address = (candidate.get("formattedAddress") or "").strip()
+    types = candidate.get("types") or []
+
+    name_score = _name_similarity(target_name, display_name)
+
+    prefecture_score = 0.0
+    if prefecture:
+        prefecture_score = 1.0 if prefecture in formatted_address else 0.0
+    else:
+        prefecture_score = 0.5
+
+    area_score = 0.5
+    if area:
+        area_tokens = [t for t in str(area).replace("　", " ").split(" ") if t]
+        if area_tokens:
+            hits = sum(1 for t in area_tokens if t in formatted_address)
+            area_score = min(1.0, hits / max(len(area_tokens), 1))
+
+    type_score = 0.5
+    expected_type = _build_included_type(category)
+    if expected_type:
+        type_score = 1.0 if expected_type in types else 0.0
+
+    # 重み合成
+    score = (
+        name_score * 0.45
+        + prefecture_score * 0.25
+        + area_score * 0.15
+        + type_score * 0.15
+    )
+
+    return {
+        "score": round(float(score), 4),
+        "name_score": round(float(name_score), 4),
+        "prefecture_score": round(float(prefecture_score), 4),
+        "area_score": round(float(area_score), 4),
+        "type_score": round(float(type_score), 4),
+        "display_name": display_name,
+        "formatted_address": formatted_address,
+        "types": types,
+        "id": candidate.get("id"),
+        "raw": candidate,
+    }
 
 
 def text_search(
@@ -378,16 +460,34 @@ def enrich_spot_with_places(
         queries.insert(0, extra_query.strip())
 
     top: Optional[Dict[str, Any]] = None
+    top_score: float = 0.0
+    candidate_count = 0
+    search_attempts = 0
     matched_query: Optional[str] = None
     for q in queries:
+        search_attempts += 1
         candidates = text_search(
             q,
-            max_results=1,
+            max_results=5,
             prefecture=prefecture,
             category=category,
         )
         if candidates:
-            top = candidates[0]
+            candidate_count += len(candidates)
+            scored = [
+                _build_candidate_score(
+                    c,
+                    target_name=name,
+                    area=area,
+                    prefecture=prefecture,
+                    category=category,
+                )
+                for c in candidates
+            ]
+            scored.sort(key=lambda x: x["score"], reverse=True)
+            best = scored[0]
+            top = best["raw"]
+            top_score = float(best["score"])
             matched_query = q
             break
     if not top:
@@ -403,6 +503,7 @@ def enrich_spot_with_places(
         return None
 
     details = get_place_details(place_id) or top
+    details_called = True
 
     location = details.get("location") or {}
     latitude = location.get("latitude")
@@ -439,4 +540,8 @@ def enrich_spot_with_places(
         "image": image_url,
         "types": details.get("types") or [],
         "matched_query": matched_query,
+        "matched_score": top_score,
+        "search_attempts": search_attempts,
+        "candidate_count": candidate_count,
+        "details_called": details_called,
     }
