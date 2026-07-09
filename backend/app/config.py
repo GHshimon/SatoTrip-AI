@@ -121,6 +121,13 @@ class Settings(BaseSettings):
     # 設定時のみ /auth/google が有効。未設定なら503を返す。
     GOOGLE_CLIENT_ID: str = ""
 
+    # Stripe決済設定
+    # 設定時のみ決済機能が有効。未設定なら503を返す。
+    STRIPE_SECRET_KEY: str = ""
+    STRIPE_PUBLISHABLE_KEY: str = ""
+    # Webhook署名検証用シークレット（stripe listen / Dashboard で取得）
+    STRIPE_WEBHOOK_SECRET: str = ""
+
     # SMTP（パスワードリセットメール送信）
     # 未設定（SMTP_HOST が空）の場合はメール送信せず、リセットリンクをログ出力する（開発用）
     SMTP_HOST: str = ""
