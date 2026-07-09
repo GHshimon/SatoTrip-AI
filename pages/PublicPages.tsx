@@ -3,6 +3,7 @@ import { currentUser } from '../mockData';
 import { useAuth } from '../src/hooks/useAuth';
 import { useToast } from '../components/Toast';
 import * as userApi from '../src/api/users';
+import { getErrorMessage } from '../src/utils/errorHandler';
 
 export const Home: React.FC<{ onNavigate: (path: string) => void }> = ({ onNavigate }) => {
   return (
@@ -427,33 +428,286 @@ export const UserProfile: React.FC = () => {
 };
 
 export const Settings: React.FC = () => {
-  const { showInfo } = useToast();
+  const { showSuccess, showError, showInfo } = useToast();
+
+  // 設定値（getPreferences で取得）
+  const [preferences, setPreferences] = useState<userApi.UserPreferences | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  // 通知トグルの保存中フラグ（キー単位で二重操作を抑止）
+  const [savingKey, setSavingKey] = useState<string | null>(null);
+
+  // パスワード変更フォーム
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+
+  useEffect(() => {
+    const fetchPreferences = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+        const data = await userApi.getPreferences();
+        setPreferences(data);
+      } catch (err) {
+        console.error('Failed to fetch preferences:', err);
+        setError(getErrorMessage(err) || '設定の読み込みに失敗しました');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchPreferences();
+  }, []);
+
+  // 通知トグルの切替（楽観的更新＋失敗時ロールバック）
+  const handleToggle = async (key: 'notifications_enabled' | 'email_notifications') => {
+    if (!preferences || savingKey) return;
+    const previous = preferences;
+    const nextValue = !preferences[key];
+    setPreferences({ ...preferences, [key]: nextValue });
+    setSavingKey(key);
+    try {
+      const updated = await userApi.updatePreferences({ [key]: nextValue });
+      setPreferences(updated);
+      showSuccess('設定を保存しました');
+    } catch (err) {
+      console.error('Failed to update preferences:', err);
+      setPreferences(previous); // 楽観的更新の巻き戻し
+      showError(getErrorMessage(err) || '設定の保存に失敗しました');
+    } finally {
+      setSavingKey(null);
+    }
+  };
+
+  // 言語の変更
+  const handleLanguageChange = async (language: string) => {
+    if (!preferences || savingKey) return;
+    const previous = preferences;
+    setPreferences({ ...preferences, language });
+    setSavingKey('language');
+    try {
+      const updated = await userApi.updatePreferences({ language });
+      setPreferences(updated);
+      showSuccess('設定を保存しました');
+    } catch (err) {
+      console.error('Failed to update language:', err);
+      setPreferences(previous);
+      showError(getErrorMessage(err) || '設定の保存に失敗しました');
+    } finally {
+      setSavingKey(null);
+    }
+  };
+
+  // パスワード変更
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isChangingPassword) return;
+    // クライアント側バリデーション
+    if (newPassword !== confirmPassword) {
+      showError('新しいパスワードと確認用パスワードが一致しません');
+      return;
+    }
+    if (newPassword.length < 8) {
+      showError('新しいパスワードは8文字以上で入力してください');
+      return;
+    }
+    try {
+      setIsChangingPassword(true);
+      await userApi.changePassword(currentPassword, newPassword);
+      showSuccess('パスワードを変更しました');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (err) {
+      console.error('Failed to change password:', err);
+      showError(getErrorMessage(err) || 'パスワードの変更に失敗しました。現在のパスワードをご確認ください');
+    } finally {
+      setIsChangingPassword(false);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="max-w-4xl mx-auto px-4 py-10">
+        <div className="flex justify-center items-center min-h-[400px]">
+          <div className="text-center">
+            <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-text-muted">設定を読み込み中...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 再利用するトグルスイッチ
+  const ToggleSwitch: React.FC<{ checked: boolean; disabled?: boolean; onChange: () => void }> = ({ checked, disabled, onChange }) => (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      disabled={disabled}
+      onClick={onChange}
+      className={`relative inline-flex h-7 w-12 flex-shrink-0 items-center rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${checked ? 'bg-primary' : 'bg-gray-300'}`}
+    >
+      <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-6' : 'translate-x-1'}`} />
+    </button>
+  );
+
   return (
     <div className="max-w-4xl mx-auto px-4 py-10">
       <h1 className="text-3xl font-black mb-6">設定</h1>
-      <div className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100">
-        {[
-          { icon: 'notifications', title: '通知設定', desc: 'プランの更新やお得な情報を受け取る' },
-          { icon: 'language', title: '言語と地域', desc: '日本語 / JPY' },
-          { icon: 'lock', title: 'プライバシーとセキュリティ', desc: 'パスワードの変更、2段階認証' },
-          { icon: 'credit_card', title: 'お支払い方法', desc: 'クレジットカードの管理' },
-          { icon: 'help', title: 'ヘルプとサポート', desc: 'よくある質問、お問い合わせ' }
-        ].map((item, i) => (
-          <div
-            key={i}
-            onClick={() => showInfo('この機能は現在準備中です')}
-            className="p-6 border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer flex items-center gap-4 group"
-          >
-            <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-text-muted group-hover:bg-primary/10 group-hover:text-primary transition-colors">
-              <span className="material-symbols-outlined">{item.icon}</span>
+
+      {error && (
+        <div className="mb-6 p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm">
+          {error}
+        </div>
+      )}
+
+      {/* 通知設定 */}
+      {preferences && (
+        <div className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100 mb-6">
+          <div className="p-6 border-b border-gray-100 flex items-center gap-4">
+            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+              <span className="material-symbols-outlined">notifications</span>
             </div>
-            <div className="flex-1">
-              <h3 className="font-bold text-text-light">{item.title}</h3>
-              <p className="text-sm text-text-muted">{item.desc}</p>
-            </div>
-            <span className="material-symbols-outlined text-gray-300 group-hover:text-primary">chevron_right</span>
+            <h3 className="font-bold text-text-light">通知設定</h3>
           </div>
-        ))}
+          <div className="p-6 flex items-center justify-between">
+            <div className="flex-1 pr-4">
+              <p className="font-bold text-text-light">アプリ内通知</p>
+              <p className="text-sm text-text-muted">プランの更新やおすすめ情報をアプリ内で受け取る</p>
+            </div>
+            <ToggleSwitch
+              checked={preferences.notifications_enabled}
+              disabled={savingKey !== null}
+              onChange={() => handleToggle('notifications_enabled')}
+            />
+          </div>
+          <div className="p-6 border-t border-gray-100 flex items-center justify-between">
+            <div className="flex-1 pr-4">
+              <p className="font-bold text-text-light">メール通知</p>
+              <p className="text-sm text-text-muted">お得な情報やお知らせをメールで受け取る</p>
+            </div>
+            <ToggleSwitch
+              checked={preferences.email_notifications}
+              disabled={savingKey !== null}
+              onChange={() => handleToggle('email_notifications')}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* 言語と地域 */}
+      {preferences && (
+        <div className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100 mb-6">
+          <div className="p-6 border-b border-gray-100 flex items-center gap-4">
+            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+              <span className="material-symbols-outlined">language</span>
+            </div>
+            <h3 className="font-bold text-text-light">言語と地域</h3>
+          </div>
+          <div className="p-6">
+            <label className="block text-text-muted text-sm font-bold mb-1">言語</label>
+            <select
+              value={preferences.language}
+              disabled={savingKey !== null}
+              onChange={(e) => handleLanguageChange(e.target.value)}
+              className="w-full p-3 rounded-xl bg-gray-50 border border-gray-200 text-text-light font-medium focus:bg-white focus:ring-2 focus:ring-primary disabled:opacity-50"
+            >
+              <option value="ja">日本語</option>
+              <option value="en">English</option>
+            </select>
+            <p className="mt-2 text-xs text-text-muted">設定値を保存します。アプリの表示言語の切替は今後対応予定です。</p>
+          </div>
+        </div>
+      )}
+
+      {/* プライバシーとセキュリティ */}
+      <div className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100 mb-6">
+        <div className="p-6 border-b border-gray-100 flex items-center gap-4">
+          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+            <span className="material-symbols-outlined">lock</span>
+          </div>
+          <h3 className="font-bold text-text-light">プライバシーとセキュリティ</h3>
+        </div>
+        <form onSubmit={handleChangePassword} className="p-6 space-y-4">
+          <p className="text-sm font-bold text-text-light">パスワードの変更</p>
+          <div>
+            <label className="block text-text-muted text-sm font-bold mb-1">現在のパスワード</label>
+            <input
+              type="password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              autoComplete="current-password"
+              className="w-full p-3 rounded-xl bg-gray-50 border border-gray-200 text-text-light font-medium focus:bg-white focus:ring-2 focus:ring-primary"
+            />
+          </div>
+          <div>
+            <label className="block text-text-muted text-sm font-bold mb-1">新しいパスワード</label>
+            <input
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              autoComplete="new-password"
+              className="w-full p-3 rounded-xl bg-gray-50 border border-gray-200 text-text-light font-medium focus:bg-white focus:ring-2 focus:ring-primary"
+            />
+            <p className="mt-1 text-xs text-text-muted">8文字以上で入力してください。</p>
+          </div>
+          <div>
+            <label className="block text-text-muted text-sm font-bold mb-1">新しいパスワード（確認）</label>
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              autoComplete="new-password"
+              className="w-full p-3 rounded-xl bg-gray-50 border border-gray-200 text-text-light font-medium focus:bg-white focus:ring-2 focus:ring-primary"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={isChangingPassword}
+            className="bg-primary text-white px-6 py-3 rounded-full font-bold shadow-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
+          >
+            {isChangingPassword ? '変更中...' : 'パスワードを変更'}
+          </button>
+        </form>
+      </div>
+
+      {/* お支払い方法（Stripe 未実装のため準備中） */}
+      <div className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100 mb-6">
+        <button
+          type="button"
+          onClick={() => showInfo('お支払い機能は現在準備中です')}
+          className="w-full p-6 hover:bg-gray-50 transition-colors flex items-center gap-4 group text-left"
+        >
+          <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-text-muted group-hover:bg-primary/10 group-hover:text-primary transition-colors">
+            <span className="material-symbols-outlined">credit_card</span>
+          </div>
+          <div className="flex-1">
+            <h3 className="font-bold text-text-light">お支払い方法</h3>
+            <p className="text-sm text-text-muted">クレジットカードの管理</p>
+          </div>
+          <span className="text-xs bg-gray-100 text-text-muted px-2 py-1 rounded-full font-bold">準備中</span>
+        </button>
+      </div>
+
+      {/* ヘルプとサポート（お問い合わせページへ遷移） */}
+      <div className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100">
+        <button
+          type="button"
+          onClick={() => { window.location.hash = '#/contact'; }}
+          className="w-full p-6 hover:bg-gray-50 transition-colors flex items-center gap-4 group text-left"
+        >
+          <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-text-muted group-hover:bg-primary/10 group-hover:text-primary transition-colors">
+            <span className="material-symbols-outlined">help</span>
+          </div>
+          <div className="flex-1">
+            <h3 className="font-bold text-text-light">ヘルプとサポート</h3>
+            <p className="text-sm text-text-muted">よくある質問、お問い合わせ</p>
+          </div>
+          <span className="material-symbols-outlined text-gray-300 group-hover:text-primary">chevron_right</span>
+        </button>
       </div>
     </div>
   );
