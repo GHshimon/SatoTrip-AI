@@ -5,6 +5,7 @@ import { PlanList, PrefectureSpots, HotelList, FavoriteSpots, MySpots } from './
 import { PlanDetail, PlanEditor, CreatePlan } from './pages/PlanPages';
 import { AdminDashboard, AdminUsers, AdminSpots, AdminAiSettings, AdminTags } from './pages/AdminPages';
 import { TermsOfService, PrivacyPolicy, CommercialTransactionAct, Contact } from './pages/LegalPages';
+import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { plans, currentUser } from './mockData';
 import { AppConfig } from './config';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
@@ -53,6 +54,8 @@ const AppContent: React.FC = () => {
     
     // Auth Routes
     if (route === '/login') return <Layout onNavigate={navigate} currentPath={route} isAuthenticated={isAuthenticated} onLogout={onLogout}><LoginPage onLogin={handleLogin} /></Layout>;
+    // パスワード再設定（メールのリンク: /reset-password?token=...）
+    if (route.startsWith('/reset-password')) return <Layout onNavigate={navigate} currentPath={route} isAuthenticated={isAuthenticated} onLogout={onLogout}><ResetPasswordPage onNavigate={navigate} /></Layout>;
 
     // Static Layout Routes
     if (route === '/') return <Layout onNavigate={navigate} currentPath={route} isAuthenticated={isAuthenticated} onLogout={onLogout}><Home onNavigate={navigate} /></Layout>;

@@ -40,6 +40,22 @@ export async function changePassword(currentPassword: string, newPassword: strin
   });
 }
 
+/** アバター画像をアップロードして更新後のUserを返す */
+export async function uploadAvatar(file: File): Promise<User> {
+  const formData = new FormData();
+  formData.append('file', file);
+  const response = await apiClient.upload<any>('/api/users/me/avatar', formData);
+  return transformUserResponse(response);
+}
+
+/** アバターの相対URL（/uploads/...）を表示用の絶対URLに変換する */
+export function resolveAvatarUrl(avatar?: string): string {
+  if (!avatar) return '';
+  if (avatar.startsWith('http://') || avatar.startsWith('https://')) return avatar;
+  if (avatar.startsWith('/uploads/')) return `${apiClient.getBaseURL()}${avatar}`;
+  return avatar;
+}
+
 /**
  * 現在のユーザー情報取得
  */
