@@ -176,7 +176,7 @@ def summarize_with_gemini(video_title: str, video_url: str) -> Optional[str]:
         with open(r'c:\projects\SatoTrip-AI\.cursor\debug.log', 'a', encoding='utf-8') as f:
             f.write(json.dumps({"location":"youtube_collection_service.py:173","message":"Gemini API call started","data":{"video_title":video_title,"video_url":video_url,"model":"gemini-2.0-flash"},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"C"},ensure_ascii=False)+'\n')
         # #endregion
-        model = genai.GenerativeModel("gemini-2.0-flash")
+        model = genai.GenerativeModel(settings.GEMINI_MODEL)
         response = model.generate_content(prompt)
         
         # レスポンスのテキストを安全に取得

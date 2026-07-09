@@ -93,7 +93,7 @@ def summarize_sns_article_with_gemini(article_title: str, article_link: str) -> 
 """
     try:
         genai.configure(api_key=settings.GEMINI_API_KEY)
-        model = genai.GenerativeModel("gemini-2.0-flash")
+        model = genai.GenerativeModel(settings.GEMINI_MODEL)
         response = model.generate_content(prompt)
         
         # レスポンスのテキストを安全に取得

@@ -450,7 +450,7 @@ def generate_plan(
         @retry_on_error(max_retries=3, delay=1.0, backoff=2.0)
         def _generate():
             try:
-                model = genai.GenerativeModel("gemini-2.0-flash")
+                model = genai.GenerativeModel(settings.GEMINI_MODEL)
                 response = model.generate_content(prompt)
             except Exception as api_error:
                 # API呼び出しエラー（クォータエラーなど）を処理
@@ -622,7 +622,7 @@ def research_spot_info(
         @retry_on_error(max_retries=3, delay=1.0, backoff=2.0)
         def _research():
             try:
-                model = genai.GenerativeModel("gemini-2.0-flash")
+                model = genai.GenerativeModel(settings.GEMINI_MODEL)
                 response = model.generate_content(prompt)
             except Exception as api_error:
                 # API呼び出しエラー（クォータエラーなど）を処理

@@ -48,6 +48,9 @@ class Settings(BaseSettings):
     # APIキーは https://aistudio.google.com/app/apikey で取得できます
     # 本番環境では必ず設定してください
     GEMINI_API_KEY: str = ""
+    # 使用するGeminiモデル名。旧 gemini-2.0-flash 系は提供終了のため
+    # 現行モデルを既定にする（環境変数 GEMINI_MODEL で上書き可能）
+    GEMINI_MODEL: str = "gemini-2.5-flash"
 
     # YouTube Data API設定
     # APIキーは https://console.cloud.google.com/apis/credentials で取得できます
