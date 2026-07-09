@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { currentUser } from '../mockData';
 import { useAuth } from '../src/hooks/useAuth';
+import { useToast } from '../components/Toast';
 import * as userApi from '../src/api/users';
 
 export const Home: React.FC<{ onNavigate: (path: string) => void }> = ({ onNavigate }) => {
@@ -94,7 +95,9 @@ export const LoginPage: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
   const [isRegistering, setIsRegistering] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
   const { login: handleLogin, register: handleRegister } = useAuth();
+  const { showInfo } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -193,10 +196,21 @@ export const LoginPage: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
           {!isRegistering && (
             <div className="flex justify-between items-center text-sm">
               <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" className="accent-primary" />
+                <input
+                  type="checkbox"
+                  className="accent-primary"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                />
                 <span className="text-text-muted">ログイン状態を保持</span>
               </label>
-              <button type="button" className="text-primary font-bold hover:underline">パスワードを忘れた場合</button>
+              <button
+                type="button"
+                onClick={() => showInfo('パスワードリセット機能は現在準備中です')}
+                className="text-primary font-bold hover:underline"
+              >
+                パスワードを忘れた場合
+              </button>
             </div>
           )}
 
@@ -215,6 +229,7 @@ export const LoginPage: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
 
           <button
             type="button"
+            onClick={() => showInfo('Googleログインは現在準備中です')}
             className="w-full bg-white border border-gray-200 text-text-light py-3 rounded-xl font-bold hover:bg-gray-50 transition-all flex items-center justify-center gap-2"
           >
             <img src="https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg" className="w-5 h-5" alt="Google" />
@@ -279,6 +294,7 @@ export const NotFound: React.FC<{ onNavigate: (path: string) => void }> = ({ onN
 
 export const UserProfile: React.FC = () => {
   const { user, refreshUser } = useAuth();
+  const { showInfo } = useToast();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [avatar, setAvatar] = useState('');
@@ -361,7 +377,13 @@ export const UserProfile: React.FC = () => {
           <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-gray-100">
             <img src={avatar || currentUser.avatar} alt={name || currentUser.name} className="w-full h-full object-cover" />
           </div>
-          <button className="text-primary text-sm font-bold hover:underline">アイコンを変更</button>
+          <button
+            type="button"
+            onClick={() => showInfo('アイコンのアップロードは現在準備中です')}
+            className="text-primary text-sm font-bold hover:underline"
+          >
+            アイコンを変更
+          </button>
         </div>
         <div className="flex-1 w-full space-y-6">
           <div>
@@ -405,6 +427,7 @@ export const UserProfile: React.FC = () => {
 };
 
 export const Settings: React.FC = () => {
+  const { showInfo } = useToast();
   return (
     <div className="max-w-4xl mx-auto px-4 py-10">
       <h1 className="text-3xl font-black mb-6">設定</h1>
@@ -416,7 +439,11 @@ export const Settings: React.FC = () => {
           { icon: 'credit_card', title: 'お支払い方法', desc: 'クレジットカードの管理' },
           { icon: 'help', title: 'ヘルプとサポート', desc: 'よくある質問、お問い合わせ' }
         ].map((item, i) => (
-          <div key={i} className="p-6 border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer flex items-center gap-4 group">
+          <div
+            key={i}
+            onClick={() => showInfo('この機能は現在準備中です')}
+            className="p-6 border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer flex items-center gap-4 group"
+          >
             <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-text-muted group-hover:bg-primary/10 group-hover:text-primary transition-colors">
               <span className="material-symbols-outlined">{item.icon}</span>
             </div>
