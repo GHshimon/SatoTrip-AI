@@ -252,7 +252,7 @@ export async function normalizeTags(tags: string[]): Promise<TagNormalizeRespons
 /**
  * バックエンドのレスポンスをフロントエンドのSpot型に変換
  */
-function transformSpotResponse(data: any): Spot {
+export function transformSpotResponse(data: any): Spot {
   return {
     id: data.id,
     name: data.name,
