@@ -447,8 +447,10 @@ export const PrefectureSpots: React.FC<{ area: string; onNavigate: (path: string
   const [selectedCategory, setSelectedCategory] = useState('すべて');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [areaSpots, setAreaSpots] = useState<Spot[]>([]);
+  const [sortBy, setSortBy] = useState<'rating' | 'name'>('rating');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { showInfo } = useToast();
 
   const categoryMap: { [key: string]: string } = {
     '歴史': 'History',
@@ -494,7 +496,7 @@ export const PrefectureSpots: React.FC<{ area: string; onNavigate: (path: string
   }, [area]);
 
   const filteredSpots = useMemo(() => {
-    return areaSpots.filter(s => {
+    const result = areaSpots.filter(s => {
       const matchSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         s.description.toLowerCase().includes(searchTerm.toLowerCase());
 
@@ -506,11 +508,20 @@ export const PrefectureSpots: React.FC<{ area: string; onNavigate: (path: string
 
       return matchSearch && matchCategory;
     });
-  }, [areaSpots, searchTerm, selectedCategory]);
+
+    // クライアント側で並び替え
+    if (sortBy === 'name') {
+      result.sort((a, b) => a.name.localeCompare(b.name, 'ja'));
+    } else {
+      result.sort((a, b) => b.rating - a.rating);
+    }
+
+    return result;
+  }, [areaSpots, searchTerm, selectedCategory, sortBy]);
 
   const handleFavorite = (e: React.MouseEvent) => {
     e.stopPropagation();
-    alert('お気に入りに保存しました！（デモ）');
+    showInfo('スポットのお気に入り機能は現在準備中です');
   };
 
   const toggleSelection = (id: string) => {
@@ -570,9 +581,13 @@ export const PrefectureSpots: React.FC<{ area: string; onNavigate: (path: string
           />
         </div>
         <div className="flex-shrink-0 relative w-full md:w-48">
-          <select className="w-full appearance-none pl-4 pr-10 py-3 rounded-full border-none bg-white shadow-sm focus:ring-2 focus:ring-primary">
-            <option>人気順</option>
-            <option>おすすめ順</option>
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as 'rating' | 'name')}
+            className="w-full appearance-none pl-4 pr-10 py-3 rounded-full border-none bg-white shadow-sm focus:ring-2 focus:ring-primary"
+          >
+            <option value="rating">評価が高い順</option>
+            <option value="name">名前順</option>
           </select>
           <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-text-muted">expand_more</span>
         </div>
@@ -660,6 +675,7 @@ export const FavoriteSpots: React.FC<{ onNavigate: (path: string) => void }> = (
   const [selectedCategory, setSelectedCategory] = useState('すべて');
   const [sortBy, setSortBy] = useState<'rating' | 'name'>('rating');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const { showInfo } = useToast();
 
   // Extract unique values for filters
   const availableAreas = useMemo(() => ['すべて', ...Array.from(new Set(spots.map(s => s.area)))], []);
@@ -717,6 +733,10 @@ export const FavoriteSpots: React.FC<{ onNavigate: (path: string) => void }> = (
         <div>
           <h1 className="text-3xl md:text-4xl font-black text-text-light mb-2">お気に入りスポット</h1>
           <p className="text-text-muted">保存したスポットをエリアやカテゴリーで整理して、次の旅に備えましょう。</p>
+          <p className="mt-2 inline-flex items-center gap-1 text-xs text-amber-700 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-full">
+            <span className="material-symbols-outlined text-sm">info</span>
+            この機能は準備中です（表示はサンプルです）
+          </p>
         </div>
         <div className="flex gap-2">
           <button className="bg-primary/10 text-primary px-4 py-2 rounded-full font-bold text-sm hover:bg-primary/20 transition-colors">
@@ -820,7 +840,11 @@ export const FavoriteSpots: React.FC<{ onNavigate: (path: string) => void }> = (
                 </div>
 
                 <div className="absolute top-3 right-3">
-                  <button className="w-10 h-10 bg-primary text-white rounded-full flex items-center justify-center shadow-lg transform hover:scale-110 transition-transform" title="お気に入りから削除">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); showInfo('スポットのお気に入り機能は現在準備中です'); }}
+                    className="w-10 h-10 bg-primary text-white rounded-full flex items-center justify-center shadow-lg transform hover:scale-110 transition-transform"
+                    title="お気に入りから削除"
+                  >
                     <span className="material-symbols-outlined fill">bookmark</span>
                   </button>
                 </div>
@@ -1119,6 +1143,7 @@ export const MySpots: React.FC<{ onNavigate: (path: string) => void }> = ({ onNa
   const [addSearchQuery, setAddSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Spot[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const { showInfo } = useToast();
 
   // Fetch available filter options (Mock or from API if available)
   const availableAreas = useMemo(() => ['すべて', '北海道', '東京', '京都', '大阪', '福岡', '沖縄'], []);
@@ -1221,8 +1246,9 @@ export const MySpots: React.FC<{ onNavigate: (path: string) => void }> = ({ onNa
     return () => clearTimeout(timeoutId);
   }, [addSearchQuery, isAddingSpot, allSpots]);
 
-  const handleAddSpot = (spot: Spot) => {
-    setFilteredSpots(prev => [spot, ...prev]);
+  const handleAddSpot = (_spot: Spot) => {
+    // 一般ユーザー向けのスポット永続化APIが存在しないため、ローカル追加は行わず準備中を通知する。
+    showInfo('スポットの追加は現在準備中です');
     setAddSearchQuery('');
     setSearchResults([]);
     setIsAddingSpot(false);
@@ -1449,7 +1475,7 @@ export const MySpots: React.FC<{ onNavigate: (path: string) => void }> = ({ onNa
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            <button className="px-4 py-2 border border-gray-200 rounded-xl flex items-center gap-2 text-sm font-bold hover:bg-gray-50"><span className="material-symbols-outlined">filter_list</span> フィルター</button>
+            <button onClick={() => showInfo('フィルター機能は現在準備中です')} className="px-4 py-2 border border-gray-200 rounded-xl flex items-center gap-2 text-sm font-bold hover:bg-gray-50"><span className="material-symbols-outlined">filter_list</span> フィルター</button>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left whitespace-nowrap">
@@ -1484,8 +1510,8 @@ export const MySpots: React.FC<{ onNavigate: (path: string) => void }> = ({ onNa
                         <td className="p-4">{spot.area}</td>
                         <td className="p-4"><span className="bg-primary/10 text-primary px-3 py-1 rounded-full text-xs font-bold">{spot.category}</span></td>
                         <td className="p-4 text-right">
-                          <button className="p-2 hover:bg-gray-200 rounded-full text-text-muted transition-colors mr-2" title="編集"><span className="material-symbols-outlined">edit</span></button>
-                          <button className="p-2 hover:bg-red-100 rounded-full text-red-500 transition-colors" title="削除"><span className="material-symbols-outlined">delete</span></button>
+                          <button onClick={(e) => { e.stopPropagation(); showInfo('スポットの編集・削除は現在準備中です'); }} className="p-2 hover:bg-gray-200 rounded-full text-text-muted transition-colors mr-2" title="編集"><span className="material-symbols-outlined">edit</span></button>
+                          <button onClick={(e) => { e.stopPropagation(); showInfo('スポットの編集・削除は現在準備中です'); }} className="p-2 hover:bg-red-100 rounded-full text-red-500 transition-colors" title="削除"><span className="material-symbols-outlined">delete</span></button>
                         </td>
                       </tr>
                     );
