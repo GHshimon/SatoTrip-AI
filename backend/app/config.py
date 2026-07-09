@@ -128,6 +128,11 @@ class Settings(BaseSettings):
     # Webhook署名検証用シークレット（stripe listen / Dashboard で取得）
     STRIPE_WEBHOOK_SECRET: str = ""
 
+    # Redis（レート制限の共有ストア）
+    # 設定時は複数ワーカー/インスタンス間で共有されるレート制限になる。
+    # 未設定時はプロセス内メモリにフォールバック（単一ワーカー向け）。
+    REDIS_URL: str = ""
+
     # SMTP（パスワードリセットメール送信）
     # 未設定（SMTP_HOST が空）の場合はメール送信せず、リセットリンクをログ出力する（開発用）
     SMTP_HOST: str = ""
