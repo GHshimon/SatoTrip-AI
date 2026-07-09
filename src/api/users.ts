@@ -10,6 +10,36 @@ export interface UserUpdateRequest {
   avatar?: string;
 }
 
+export interface UserPreferences {
+  notifications_enabled: boolean;
+  email_notifications: boolean;
+  language: string;
+}
+
+export interface UserPreferencesUpdate {
+  notifications_enabled?: boolean;
+  email_notifications?: boolean;
+  language?: string;
+}
+
+/** 現在のユーザーの設定を取得 */
+export async function getPreferences(): Promise<UserPreferences> {
+  return apiClient.get<UserPreferences>('/api/users/me/preferences');
+}
+
+/** 現在のユーザーの設定を更新 */
+export async function updatePreferences(data: UserPreferencesUpdate): Promise<UserPreferences> {
+  return apiClient.put<UserPreferences>('/api/users/me/preferences', data);
+}
+
+/** パスワードを変更（現在のパスワード検証あり） */
+export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  await apiClient.put<{ message: string }>('/api/users/me/password', {
+    current_password: currentPassword,
+    new_password: newPassword,
+  });
+}
+
 /**
  * 現在のユーザー情報取得
  */

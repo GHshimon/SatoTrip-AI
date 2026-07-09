@@ -1,7 +1,7 @@
 """
 ユーザー関連のPydanticスキーマ
 """
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from typing import Optional
 
 
@@ -30,7 +30,30 @@ class UserResponse(UserBase):
     """ユーザーレスポンススキーマ"""
     id: str
     is_active: bool
-    
+
     class Config:
         from_attributes = True
+
+
+class UserPreferencesResponse(BaseModel):
+    """ユーザー設定レスポンススキーマ"""
+    notifications_enabled: bool
+    email_notifications: bool
+    language: str
+
+    class Config:
+        from_attributes = True
+
+
+class UserPreferencesUpdate(BaseModel):
+    """ユーザー設定更新スキーマ（部分更新）"""
+    notifications_enabled: Optional[bool] = None
+    email_notifications: Optional[bool] = None
+    language: Optional[str] = None
+
+
+class PasswordChangeRequest(BaseModel):
+    """パスワード変更スキーマ"""
+    current_password: str
+    new_password: str = Field(min_length=8, description="新しいパスワード（8文字以上）")
 
