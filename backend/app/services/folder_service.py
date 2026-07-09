@@ -12,11 +12,19 @@ from datetime import datetime
 
 def create_folder(db: Session, user_id: str, folder_data: dict) -> PlanFolder:
     """フォルダを作成"""
+    parent_id = folder_data.get("parent_id")
+    # 親フォルダを指定する場合は、それが本人の所有物であることを検証する
+    # （他ユーザーのフォルダIDを親に指定できるIDORを防ぐ）
+    if parent_id and not get_folder(db, parent_id, user_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="親フォルダが見つかりません"
+        )
     folder = PlanFolder(
         id=str(uuid.uuid4()),
         user_id=user_id,
         name=folder_data["name"],
-        parent_id=folder_data.get("parent_id")
+        parent_id=parent_id
     )
     db.add(folder)
     db.commit()
@@ -51,13 +59,20 @@ def update_folder(db: Session, folder_id: str, user_id: str, folder_data: dict) 
     if "name" in folder_data and folder_data["name"]:
         folder.name = folder_data["name"]
     if "parent_id" in folder_data:
+        new_parent_id = folder_data["parent_id"]
         # Check for circular reference if moving
-        if folder_data["parent_id"] == folder_id:
+        if new_parent_id == folder_id:
              raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="自分自身を親にすることはできません"
             )
-        folder.parent_id = folder_data["parent_id"]
+        # 親フォルダを指定する場合は本人の所有物か検証する（IDOR防止）
+        if new_parent_id and not get_folder(db, new_parent_id, user_id):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="親フォルダが見つかりません"
+            )
+        folder.parent_id = new_parent_id
     
     folder.updated_at = datetime.now()
     db.commit()
