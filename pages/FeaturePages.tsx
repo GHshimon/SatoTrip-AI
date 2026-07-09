@@ -520,7 +520,10 @@ export const PrefectureSpots: React.FC<{ area: string; onNavigate: (path: string
   };
 
   const handleCreatePlan = () => {
-    localStorage.setItem(AppConfig.STORAGE_KEYS.PENDING_SPOTS, JSON.stringify(selectedIds));
+    // Store selected spot objects (not just IDs) so CreatePlan can use them directly
+    // without matching against mockData. Works with real API spots.
+    const selectedSpots = areaSpots.filter(s => selectedIds.includes(s.id));
+    localStorage.setItem(AppConfig.STORAGE_KEYS.PENDING_SPOTS, JSON.stringify(selectedSpots));
     onNavigate('/create');
   };
 
@@ -701,8 +704,10 @@ export const FavoriteSpots: React.FC<{ onNavigate: (path: string) => void }> = (
   };
 
   const handleCreatePlan = () => {
-    // Store selected spots in localStorage to pass to CreatePlan page
-    localStorage.setItem(AppConfig.STORAGE_KEYS.PENDING_SPOTS, JSON.stringify(selectedIds));
+    // Store selected spot objects (not just IDs) so CreatePlan can use them directly
+    // without matching against mockData. Works with real API spots.
+    const selectedSpots = spots.filter(s => selectedIds.includes(s.id));
+    localStorage.setItem(AppConfig.STORAGE_KEYS.PENDING_SPOTS, JSON.stringify(selectedSpots));
     onNavigate('/create');
   };
 
@@ -1176,7 +1181,15 @@ export const MySpots: React.FC<{ onNavigate: (path: string) => void }> = ({ onNa
 
 
   const handleCreatePlan = () => {
-    localStorage.setItem(AppConfig.STORAGE_KEYS.PENDING_SPOTS, JSON.stringify(selectedIds));
+    // Store selected spot objects (not just IDs) so CreatePlan can use them directly
+    // without matching against mockData. Works with real API spots.
+    // Combine displayed and locally-added spots, dedupe by id.
+    const byId = new Map<string, Spot>();
+    [...filteredSpots, ...allSpots].forEach(s => byId.set(s.id, s));
+    const selectedSpots = selectedIds
+      .map(id => byId.get(id))
+      .filter((s): s is Spot => !!s);
+    localStorage.setItem(AppConfig.STORAGE_KEYS.PENDING_SPOTS, JSON.stringify(selectedSpots));
     onNavigate('/create');
   };
 

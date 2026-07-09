@@ -1506,6 +1506,7 @@ export const AdminSpots: React.FC = () => {
 };
 
 export const AdminUsers: React.FC = () => {
+  const { showSuccess, showError } = useToast();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 

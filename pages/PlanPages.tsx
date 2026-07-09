@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Plan, PlanSpot, PlanRequest, Spot, HotelCategory, HotelSearchRequest, HotelSearchResult } from '../types';
-import { plans, spots } from '../mockData';
+import { plans } from '../mockData';
 import { AppConfig } from '../config';
 import * as planApi from '../src/api/plans';
 import * as hotelApi from '../src/api/hotels';
@@ -684,15 +684,29 @@ export const CreatePlan: React.FC<{ onNavigate: (path: string) => void }> = ({ o
   // Check for pending spots passed from Favorites page
   useEffect(() => {
     const stored = localStorage.getItem(AppConfig.STORAGE_KEYS.PENDING_SPOTS);
-    if (stored) {
-      const ids = JSON.parse(stored);
-      const selected = spots.filter(s => ids.includes(s.id));
-      setPendingSpots(selected);
+    if (!stored) return;
 
-      if (selected.length > 0) {
-        // Pre-fill destination from the first selected spot's area
-        setRequest(prev => ({ ...prev, destination: selected[0].area }));
+    // 保存側（FeaturePages）から渡されたスポットオブジェクトをそのまま使う。
+    // mockData との突き合わせは行わず、実APIのスポットでも反映されるようにする。
+    let selected: Spot[] = [];
+    try {
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed)) {
+        // 壊れた/想定外の要素を除外し、最低限 id を持つオブジェクトのみ採用
+        selected = parsed.filter(
+          (s): s is Spot => !!s && typeof s === 'object' && typeof s.id === 'string'
+        );
       }
+    } catch (e) {
+      console.error('Failed to parse pending spots from storage', e);
+      selected = [];
+    }
+
+    setPendingSpots(selected);
+
+    if (selected.length > 0) {
+      // Pre-fill destination from the first selected spot's area
+      setRequest(prev => ({ ...prev, destination: selected[0].area }));
     }
   }, []);
 
@@ -880,7 +894,7 @@ export const CreatePlan: React.FC<{ onNavigate: (path: string) => void }> = ({ o
                   <div className="flex items-center gap-4">
                     <button onClick={() => setRequest({ ...request, days: Math.max(1, request.days - 1) })} className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 font-bold text-xl">-</button>
                     <span className="text-2xl font-black w-20 text-center">{request.days}日間</span>
-                    <button onClick={() => setRequest({ ...request, days: Math.min(14, request.days + 1) })} className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 font-bold text-xl">+</button>
+                    <button onClick={() => setRequest({ ...request, days: Math.min(7, request.days + 1) })} className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 font-bold text-xl">+</button>
                   </div>
                 </div>
 

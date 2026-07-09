@@ -293,7 +293,10 @@ export const UserProfile: React.FC = () => {
         setError(null);
         const userData = await userApi.getCurrentUser();
         setName(userData.name);
-        setEmail(userData.avatar || ''); // メールアドレスは別途取得が必要な場合があります
+        // バックエンド(PUT /api/users/me)はemail更新を受け付けるが、getCurrentUser()
+        // (src/api/users.ts) がレスポンスからemailを除いているため、現状この画面では
+        // 現在値を取得できない。avatarを入れていたコピペバグを修正し、emailから初期化する。
+        setEmail((userData as { email?: string }).email ?? '');
         setAvatar(userData.avatar || '');
       } catch (err: any) {
         console.error('Failed to fetch user:', err);
@@ -315,7 +318,13 @@ export const UserProfile: React.FC = () => {
     try {
       setIsSaving(true);
       setError(null);
-      await userApi.updateUser({ name, avatar });
+      const payload: userApi.UserUpdateRequest = { name, avatar };
+      // メールアドレスが入力されている場合のみ送信する。
+      // 空文字はバックエンドのEmailStr検証で422となり保存全体が失敗するため除外する。
+      if (email.trim()) {
+        payload.email = email.trim();
+      }
+      await userApi.updateUser(payload);
       await refreshUser();
       alert('プロフィールを更新しました');
     } catch (err: any) {
@@ -370,8 +379,10 @@ export const UserProfile: React.FC = () => {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              placeholder="新しいメールアドレスを入力"
               className="w-full p-3 rounded-xl bg-gray-50 border border-gray-200 text-text-light font-medium focus:bg-white focus:ring-2 focus:ring-primary"
             />
+            <p className="mt-1 text-xs text-text-muted">空欄のままにすると、現在のメールアドレスは変更されません。</p>
           </div>
           <div>
             <label className="block text-text-muted text-sm font-bold mb-1">プラン</label>

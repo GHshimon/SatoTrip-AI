@@ -136,6 +136,8 @@ export interface BulkAddRequest {
 export interface BulkAddResponse {
   success: boolean;
   imported: number;
+  created?: number;
+  merged?: number;
   errors: number;
   skipped: number;
   total_keywords: number;

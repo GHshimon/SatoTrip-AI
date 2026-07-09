@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { currentUser } from '../mockData';
+import { useAuth } from '../src/hooks/useAuth';
 
 interface HeaderProps {
   onNavigate: (path: string) => void;
@@ -11,6 +11,7 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({ onNavigate, currentPath, isAuthenticated, onLogout }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const { user } = useAuth();
 
   return (
     <header className="sticky top-0 z-50 w-full bg-white/80 backdrop-blur-sm border-b border-gray-200">
@@ -44,9 +45,9 @@ export const Header: React.FC<HeaderProps> = ({ onNavigate, currentPath, isAuthe
             >
               My Spot
             </button>
-            {isAuthenticated && currentUser.role === 'admin' && (
-              <button 
-                onClick={() => onNavigate('/admin/ai')} 
+            {isAuthenticated && user?.role === 'admin' && (
+              <button
+                onClick={() => onNavigate('/admin')}
                 className={`text-sm font-medium transition-colors ${currentPath.startsWith('/admin') ? 'text-primary' : 'text-text-light hover:text-primary'}`}
               >
                 Admin
@@ -66,13 +67,17 @@ export const Header: React.FC<HeaderProps> = ({ onNavigate, currentPath, isAuthe
              {isAuthenticated ? (
                <div className="relative">
                  <button onClick={() => setIsUserMenuOpen(!isUserMenuOpen)} className="w-10 h-10 rounded-full bg-gray-200 overflow-hidden border border-gray-300 focus:ring-2 focus:ring-primary focus:outline-none">
-                   <img src={currentUser.avatar} alt="User" className="w-full h-full object-cover" />
+                   {user?.avatar ? (
+                     <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" />
+                   ) : (
+                     <span className="material-symbols-outlined text-gray-400 flex items-center justify-center w-full h-full">person</span>
+                   )}
                  </button>
                  {isUserMenuOpen && (
                    <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-gray-100 py-2 animate-fade-in z-50">
                      <div className="px-4 py-2 border-b border-gray-100 mb-2">
-                       <p className="font-bold text-sm truncate">{currentUser.name}</p>
-                       <p className="text-xs text-text-muted">Premium Plan</p>
+                       <p className="font-bold text-sm truncate">{user?.name ?? 'ゲスト'}</p>
+                       <p className="text-xs text-text-muted">{user?.role === 'admin' ? '管理者' : 'メンバー'}</p>
                      </div>
                      <button onClick={() => { onNavigate('/favorites'); setIsUserMenuOpen(false); }} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 flex items-center gap-2"><span className="material-symbols-outlined text-base text-primary">favorite</span> お気に入り</button>
                      <button onClick={() => { onNavigate('/profile'); setIsUserMenuOpen(false); }} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 flex items-center gap-2"><span className="material-symbols-outlined text-base">person</span> プロフィール</button>

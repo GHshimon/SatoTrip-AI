@@ -2,7 +2,7 @@
  * ユーザー管理API
  */
 import { apiClient } from './client';
-import { User } from '../types';
+import { User } from '../../types';
 
 export interface UserUpdateRequest {
   name?: string;

@@ -3,8 +3,8 @@
  * JWT認証状態を管理
  */
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { AppConfig } from '../config';
-import { User } from '../types';
+import { AppConfig } from '../../config';
+import { User } from '../../types';
 import * as authApi from '../api/auth';
 import * as userApi from '../api/users';
 import { apiClient } from '../api/client';
