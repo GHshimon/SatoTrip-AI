@@ -186,18 +186,9 @@ export const PlanList: React.FC<{ onNavigate: (path: string) => void }> = ({ onN
   // Bulk Move
   const handleBulkMove = async () => {
     if (selectedIds.length === 0) return;
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/0154fa29-b553-4de4-8ba1-d0609672b9f3',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FeaturePages.tsx:187',message:'handleBulkMove called',data:{targetMoveFolderId,selectedIds,foldersCount:folders.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion
     try {
       const folderId = targetMoveFolderId === 'root' ? null : targetMoveFolderId;
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/0154fa29-b553-4de4-8ba1-d0609672b9f3',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FeaturePages.tsx:192',message:'Before updatePlan calls',data:{folderId,selectedIds,validFolderId:folderId !== null ? folders.find(f => f.id === folderId) !== undefined : true},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-      // #endregion
       await Promise.all(selectedIds.map(id => planApi.updatePlan(id, { folder_id: folderId })));
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/0154fa29-b553-4de4-8ba1-d0609672b9f3',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FeaturePages.tsx:195',message:'Plans moved successfully',data:{folderId,selectedIdsCount:selectedIds.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-      // #endregion
       
       // Update local state
       setPlansList(prev => prev.map(p => selectedIds.includes(p.id) ? { ...p, folderId: folderId || undefined } : p));
@@ -207,9 +198,6 @@ export const PlanList: React.FC<{ onNavigate: (path: string) => void }> = ({ onN
       setIsMoveModalOpen(false);
       showSuccess('プランを移動しました');
     } catch (err) {
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/0154fa29-b553-4de4-8ba1-d0609672b9f3',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FeaturePages.tsx:204',message:'Move failed',data:{error:String(err),targetMoveFolderId,selectedIds},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-      // #endregion
       console.error('Move failed:', err);
       showError('移動に失敗しました');
     }

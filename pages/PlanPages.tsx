@@ -1110,16 +1110,10 @@ export const PlanDetail: React.FC<{ planId: string; onNavigate: (path: string) =
           m = 'public';
         }
         initial[s.id] = m;
-        // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/0154fa29-b553-4de4-8ba1-d0609672b9f3',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'PlanPages.tsx:1153',message:'transportModes init',data:{spotId:s.id,transportMode:s.transportMode,mappedMode:m},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-        // #endregion
       } else {
         initial[s.id] = 'public';
       }
     });
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/0154fa29-b553-4de4-8ba1-d0609672b9f3',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'PlanPages.tsx:1158',message:'transportModes set',data:{initialModes:Object.keys(initial).length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion
     setTransportModes(initial);
   }, [plan]);
 
@@ -1259,15 +1253,9 @@ export const PlanDetail: React.FC<{ planId: string; onNavigate: (path: string) =
   }
 
   const handleModeChange = (id: string, mode: 'public' | 'car' | 'walk') => {
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/0154fa29-b553-4de4-8ba1-d0609672b9f3',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'PlanPages.tsx:1302',message:'handleModeChange',data:{id,mode,currentValue:transportModes[id]},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion
     // transportModesのみ更新（localPlanSpotsのtransportModeは更新しない - 元の値を保持）
     setTransportModes(prev => {
       const updated = { ...prev, [id]: mode };
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/0154fa29-b553-4de4-8ba1-d0609672b9f3',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'PlanPages.tsx:1304',message:'transportModes updated',data:{id,mode,updatedValue:updated[id]},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-      // #endregion
       return updated;
     });
   };
@@ -1876,9 +1864,6 @@ export const PlanDetail: React.FC<{ planId: string; onNavigate: (path: string) =
                     <TransportLine
                       mode={(() => {
                         const modeValue = transportModes[pSpot.id] || 'public';
-                        // #region agent log
-                        fetch('http://127.0.0.1:7243/ingest/0154fa29-b553-4de4-8ba1-d0609672b9f3',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'PlanPages.tsx:1968',message:'TransportLine mode prop',data:{spotId:pSpot.id,transportModesValue:transportModes[pSpot.id],modeValue,transportMode:pSpot.transportMode},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-                        // #endregion
                         return modeValue;
                       })()}
                       duration={(() => {

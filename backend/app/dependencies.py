@@ -68,13 +68,6 @@ async def verify_api_key(
     APIキーを検証
     リクエストヘッダーからX-API-Keyを取得して検証します
     """
-    # #region agent log
-    import json
-    try:
-        with open(r'c:\projects\SatoTrip-AI\.cursor\debug.log', 'a', encoding='utf-8') as f:
-            f.write(json.dumps({"id":"log_entry","timestamp":int(__import__('time').time()*1000),"location":"dependencies.py:verify_api_key","message":"verify_api_key entry","data":{"has_api_key":x_api_key is not None},"sessionId":"debug-session","runId":"run1","hypothesisId":"B"})+'\n')
-    except: pass
-    # #endregion
     
     if not x_api_key:
         raise HTTPException(
@@ -83,21 +76,9 @@ async def verify_api_key(
         )
     
     # APIキーを検証
-    # #region agent log
-    try:
-        with open(r'c:\projects\SatoTrip-AI\.cursor\debug.log', 'a', encoding='utf-8') as f:
-            f.write(json.dumps({"id":"log_entry","timestamp":int(__import__('time').time()*1000),"location":"dependencies.py:verify_api_key","message":"Before get_api_key_by_plain_key","data":{"api_key_prefix":x_api_key[:5] if x_api_key else None},"sessionId":"debug-session","runId":"run1","hypothesisId":"B"})+'\n')
-    except: pass
-    # #endregion
     
     api_key = get_api_key_by_plain_key(db, x_api_key)
     
-    # #region agent log
-    try:
-        with open(r'c:\projects\SatoTrip-AI\.cursor\debug.log', 'a', encoding='utf-8') as f:
-            f.write(json.dumps({"id":"log_entry","timestamp":int(__import__('time').time()*1000),"location":"dependencies.py:verify_api_key","message":"After get_api_key_by_plain_key","data":{"api_key_found":api_key is not None,"api_key_id":api_key.id if api_key else None},"sessionId":"debug-session","runId":"run1","hypothesisId":"B"})+'\n')
-    except: pass
-    # #endregion
     
     if not api_key:
         raise HTTPException(

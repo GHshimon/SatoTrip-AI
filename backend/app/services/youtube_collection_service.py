@@ -70,12 +70,6 @@ def get_youtube_videos(keyword: str, max_results: int = 5) -> tuple[List[Dict[st
     }
     
     try:
-        # #region agent log
-        import json
-        import time
-        with open(r'c:\projects\SatoTrip-AI\.cursor\debug.log', 'a', encoding='utf-8') as f:
-            f.write(json.dumps({"location":"youtube_collection_service.py:72","message":"YouTube API call started","data":{"keyword":keyword,"max_results":max_results},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"},ensure_ascii=False)+'\n')
-        # #endregion
         res = requests.get(url, params=params, timeout=10)
         res.raise_for_status()
         data = res.json()
@@ -85,10 +79,6 @@ def get_youtube_videos(keyword: str, max_results: int = 5) -> tuple[List[Dict[st
             title = item["snippet"]["title"]
             link = f"https://www.youtube.com/watch?v={vid}"
             videos.append({"title": title, "url": link})
-        # #region agent log
-        with open(r'c:\projects\SatoTrip-AI\.cursor\debug.log', 'a', encoding='utf-8') as f:
-            f.write(json.dumps({"location":"youtube_collection_service.py:81","message":"YouTube API call succeeded","data":{"keyword":keyword,"videos_count":len(videos),"videos":videos[:3]},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"B"},ensure_ascii=False)+'\n')
-        # #endregion
         return videos, None
     except requests.exceptions.HTTPError as e:
         # エラーレスポンスの詳細を取得
@@ -170,12 +160,6 @@ def summarize_with_gemini(video_title: str, video_url: str) -> Optional[str]:
 """
     try:
         genai.configure(api_key=settings.GEMINI_API_KEY)
-        # #region agent log
-        import json
-        import time
-        with open(r'c:\projects\SatoTrip-AI\.cursor\debug.log', 'a', encoding='utf-8') as f:
-            f.write(json.dumps({"location":"youtube_collection_service.py:173","message":"Gemini API call started","data":{"video_title":video_title,"video_url":video_url,"model":"gemini-2.0-flash"},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"C"},ensure_ascii=False)+'\n')
-        # #endregion
         model = genai.GenerativeModel(settings.GEMINI_MODEL)
         response = model.generate_content(prompt)
         
@@ -184,27 +168,13 @@ def summarize_with_gemini(video_title: str, video_url: str) -> Optional[str]:
             error_msg = "Gemini APIからのレスポンスが空です"
             if hasattr(response, 'prompt_feedback') and response.prompt_feedback:
                 error_msg += f": {response.prompt_feedback}"
-            # #region agent log
-            with open(r'c:\projects\SatoTrip-AI\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                f.write(json.dumps({"location":"youtube_collection_service.py:181","message":"Gemini API empty response","data":{"video_title":video_title,"error_msg":error_msg,"prompt_feedback":str(response.prompt_feedback) if hasattr(response, 'prompt_feedback') else None},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"A"},ensure_ascii=False)+'\n')
-            # #endregion
             log_error("GEMINI_EMPTY_RESPONSE", error_msg)
             return None
         
         summary_text = response.text.strip()
-        # #region agent log
-        with open(r'c:\projects\SatoTrip-AI\.cursor\debug.log', 'a', encoding='utf-8') as f:
-            f.write(json.dumps({"location":"youtube_collection_service.py:184","message":"Gemini API call succeeded","data":{"video_title":video_title,"summary_length":len(summary_text),"summary_preview":summary_text[:200]},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"A"},ensure_ascii=False)+'\n')
-        # #endregion
         return summary_text
     except Exception as e:
         error_str = str(e)
-        # #region agent log
-        import json
-        import time
-        with open(r'c:\projects\SatoTrip-AI\.cursor\debug.log', 'a', encoding='utf-8') as f:
-            f.write(json.dumps({"location":"youtube_collection_service.py:186","message":"Gemini API call failed","data":{"video_title":video_title,"error":error_str,"error_type":type(e).__name__,"quota_error":"429" in error_str or "quota" in error_str.lower()},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"A"},ensure_ascii=False)+'\n')
-        # #endregion
         log_error("GEMINI_SUMMARY_ERROR", f"Gemini要約失敗: {e}")
         return None
 
@@ -238,19 +208,9 @@ def collect_youtube_data(
     successful_keywords = 0
     failed_keywords = 0
     
-    # #region agent log
-    import json
-    import time
-    with open(r'c:\projects\SatoTrip-AI\.cursor\debug.log', 'a', encoding='utf-8') as f:
-        f.write(json.dumps({"location":"youtube_collection_service.py:241","message":"checking target_keywords","data":{"target_keywords":target_keywords,"target_keywords_type":type(target_keywords).__name__ if target_keywords else None,"target_keywords_len":len(target_keywords) if isinstance(target_keywords, list) else 0,"is_list":isinstance(target_keywords, list),"is_not_empty":bool(target_keywords and isinstance(target_keywords, list) and len(target_keywords) > 0)},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"C"},ensure_ascii=False)+'\n')
-    # #endregion
     if target_keywords and isinstance(target_keywords, list) and len(target_keywords) > 0:
         # 指定キーワードを使用
         search_keywords = target_keywords
-        # #region agent log
-        with open(r'c:\projects\SatoTrip-AI\.cursor\debug.log', 'a', encoding='utf-8') as f:
-            f.write(json.dumps({"location":"youtube_collection_service.py:244","message":"using target_keywords","data":{"search_keywords":search_keywords,"search_keywords_count":len(search_keywords)},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"C"},ensure_ascii=False)+'\n')
-        # #endregion
     else:
         # キーワード設定を読み込み
         keyword_config = load_keyword_config(keywords_config_path)
@@ -345,24 +305,10 @@ def collect_youtube_data(
                     video_title=v["title"]
                 )
                 
-                # #region agent log
-                import json as json_module
-                import time
-                with open(r'c:\projects\SatoTrip-AI\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                    f.write(json_module.dumps({"location":"youtube_collection_service.py:332","message":"Calling summarize_with_gemini","data":{"keyword":keyword,"video_title":v["title"],"video_url":v["url"]},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"A"},ensure_ascii=False)+'\n')
-                # #endregion
                 
                 try:
                     summary = summarize_with_gemini(v["title"], v["url"])
-                    # #region agent log
-                    with open(r'c:\projects\SatoTrip-AI\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                        f.write(json_module.dumps({"location":"youtube_collection_service.py:340","message":"summarize_with_gemini completed","data":{"keyword":keyword,"video_title":v["title"],"summary_success":summary is not None,"summary_length":len(summary) if summary else 0},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"C"},ensure_ascii=False)+'\n')
-                    # #endregion
                 except Exception as gemini_error:
-                    # #region agent log
-                    with open(r'c:\projects\SatoTrip-AI\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                        f.write(json_module.dumps({"location":"youtube_collection_service.py:343","message":"summarize_with_gemini exception","data":{"keyword":keyword,"video_title":v["title"],"error":str(gemini_error),"error_type":type(gemini_error).__name__},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"C"},ensure_ascii=False)+'\n')
-                    # #endregion
                     summary = None
                 
                 if summary:
