@@ -137,10 +137,11 @@ export const Layout: React.FC<{
       </main>
       <footer className="bg-white border-t border-gray-200 py-10 mt-auto">
         <div className="max-w-7xl mx-auto px-4 text-center text-text-muted text-sm">
-          <div className="flex justify-center gap-6 mb-4">
-            <button className="hover:text-primary">利用規約</button>
-            <button className="hover:text-primary">プライバシーポリシー</button>
-            <button className="hover:text-primary">お問い合わせ</button>
+          <div className="flex justify-center flex-wrap gap-x-6 gap-y-2 mb-4">
+            <button onClick={() => onNavigate('/terms')} className="hover:text-primary">利用規約</button>
+            <button onClick={() => onNavigate('/privacy')} className="hover:text-primary">プライバシーポリシー</button>
+            <button onClick={() => onNavigate('/legal')} className="hover:text-primary">特定商取引法に基づく表記</button>
+            <button onClick={() => onNavigate('/contact')} className="hover:text-primary">お問い合わせ</button>
           </div>
           <p>© 2024 SatoTrip AI. All rights reserved.</p>
         </div>

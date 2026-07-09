@@ -4,6 +4,7 @@ import { Home, NotFound, UserProfile, Settings, LoginPage } from './pages/Public
 import { PlanList, PrefectureSpots, HotelList, FavoriteSpots, MySpots } from './pages/FeaturePages';
 import { PlanDetail, PlanEditor, CreatePlan } from './pages/PlanPages';
 import { AdminDashboard, AdminUsers, AdminSpots, AdminAiSettings, AdminTags } from './pages/AdminPages';
+import { TermsOfService, PrivacyPolicy, CommercialTransactionAct, Contact } from './pages/LegalPages';
 import { plans, currentUser } from './mockData';
 import { AppConfig } from './config';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
@@ -60,7 +61,13 @@ const AppContent: React.FC = () => {
     if (route === '/favorites') return <Layout onNavigate={navigate} currentPath={route} isAuthenticated={isAuthenticated} onLogout={onLogout}><FavoriteSpots onNavigate={navigate} /></Layout>;
     if (route === '/profile') return <Layout onNavigate={navigate} currentPath={route} isAuthenticated={isAuthenticated} onLogout={onLogout}><UserProfile /></Layout>;
     if (route === '/settings') return <Layout onNavigate={navigate} currentPath={route} isAuthenticated={isAuthenticated} onLogout={onLogout}><Settings /></Layout>;
-    
+
+    // 法務・情報ページ
+    if (route === '/terms') return <Layout onNavigate={navigate} currentPath={route} isAuthenticated={isAuthenticated} onLogout={onLogout}><TermsOfService onNavigate={navigate} /></Layout>;
+    if (route === '/privacy') return <Layout onNavigate={navigate} currentPath={route} isAuthenticated={isAuthenticated} onLogout={onLogout}><PrivacyPolicy onNavigate={navigate} /></Layout>;
+    if (route === '/legal') return <Layout onNavigate={navigate} currentPath={route} isAuthenticated={isAuthenticated} onLogout={onLogout}><CommercialTransactionAct onNavigate={navigate} /></Layout>;
+    if (route === '/contact') return <Layout onNavigate={navigate} currentPath={route} isAuthenticated={isAuthenticated} onLogout={onLogout}><Contact onNavigate={navigate} /></Layout>;
+
     // Route to Plan Creator
     if (route === '/create') return <Layout onNavigate={navigate} currentPath={route} isAuthenticated={isAuthenticated} onLogout={onLogout}><CreatePlan onNavigate={navigate} /></Layout>;
     
