@@ -247,8 +247,16 @@ def get_spots_for_plan(
             
             if matched:
                 filtered_result.append(spot)
-        
-        result = filtered_result[:limit]  # 制限を適用
+
+        # タグに一致するスポットが無い場合は、エリアのみの候補にフォールバックする。
+        # テーマは「観光」「グルメ」等の汎用カテゴリにマッピングされる一方、スポットの
+        # タグは動画由来の具体的キーワードが中心で一致しないことが多く、ここで空になると
+        # プラン生成が「スポットは必須です」で必ず失敗するため（result はこの時点で
+        # エリア絞り込み済みの候補を保持している）。
+        if filtered_result:
+            result = filtered_result[:limit]
+        else:
+            result = result[:limit]
         # #region agent log
         with open(r'c:\projects\SatoTrip-AI\.cursor\debug.log', 'a', encoding='utf-8') as f:
             f.write(json.dumps({"location":"spot_service.py:165","message":"After Python tag filter","data":{"filteredCount":len(result)},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"A"},ensure_ascii=False)+'\n')
