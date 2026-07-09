@@ -108,7 +108,30 @@ class Settings(BaseSettings):
     # development: 開発環境（デバッグ情報を表示）
     # production: 本番環境（セキュリティ強化）
     ENVIRONMENT: str = "development"
-    
+
+    # フロントエンドのベースURL（パスワードリセットのリンク生成に使用）
+    FRONTEND_URL: str = "http://localhost:3000"
+
+    # アバターアップロード設定
+    # ローカルディスク保存先（本番は S3 等に差し替え可能）。相対パスはCWD基準。
+    UPLOAD_DIR: str = "./data/uploads"
+    AVATAR_MAX_BYTES: int = 5 * 1024 * 1024  # 5MB
+
+    # Google OAuth（IDトークン検証方式）
+    # 設定時のみ /auth/google が有効。未設定なら503を返す。
+    GOOGLE_CLIENT_ID: str = ""
+
+    # SMTP（パスワードリセットメール送信）
+    # 未設定（SMTP_HOST が空）の場合はメール送信せず、リセットリンクをログ出力する（開発用）
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM: str = "no-reply@satotrip.example.com"
+    SMTP_USE_TLS: bool = True
+    # パスワードリセットトークンの有効期限（分）
+    PASSWORD_RESET_TOKEN_EXPIRE_MINUTES: int = 30
+
     @property
     def cors_origins_list(self) -> List[str]:
         """CORS originsをリストに変換"""

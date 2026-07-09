@@ -1,7 +1,7 @@
 """
 認証関連のPydanticスキーマ
 """
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 
 class UserRegister(BaseModel):
@@ -31,4 +31,20 @@ class TokenResponse(BaseModel):
 class TokenRefresh(BaseModel):
     """トークンリフレッシュリクエスト"""
     refresh_token: str
+
+
+class PasswordResetRequest(BaseModel):
+    """パスワードリセット要求リクエスト"""
+    email: EmailStr
+
+
+class PasswordResetConfirm(BaseModel):
+    """パスワードリセット確定リクエスト"""
+    token: str
+    new_password: str = Field(min_length=8, description="新しいパスワード（8文字以上）")
+
+
+class GoogleLoginRequest(BaseModel):
+    """Googleログインリクエスト（Google Identity Services の ID トークン）"""
+    id_token: str
 

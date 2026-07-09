@@ -7,5 +7,6 @@ from app.models.plan_cache import PlanCache
 from app.models.api_key import ApiKey, ApiKeyUsage
 from app.models.spot_favorite import SpotFavorite
 from app.models.user_preferences import UserPreferences
+from app.models.password_reset_token import PasswordResetToken
 
-__all__ = ["User", "Spot", "Plan", "Subscription", "Usage", "PlanCache", "ApiKey", "ApiKeyUsage", "SpotFavorite", "UserPreferences"]
+__all__ = ["User", "Spot", "Plan", "Subscription", "Usage", "PlanCache", "ApiKey", "ApiKeyUsage", "SpotFavorite", "UserPreferences", "PasswordResetToken"]

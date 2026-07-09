@@ -1,7 +1,7 @@
 """
 ユーザー管理APIエンドポイント
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.orm import Session
 from typing import List
 from app.utils.database import get_db
@@ -19,6 +19,8 @@ from app.services.plan_service import get_user_plans
 from app.services import preferences_service
 from app.schemas.plan import PlanResponse
 from app.utils.security import hash_password, verify_password
+from app.utils.storage import save_avatar, ALLOWED_IMAGE_TYPES
+from app.config import settings
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
@@ -74,6 +76,36 @@ async def update_my_preferences(
     return preferences_service.update_preferences(
         db, current_user.id, prefs.model_dump(exclude_unset=True)
     )
+
+
+@router.post("/me/avatar", response_model=UserResponse)
+async def upload_my_avatar(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """アバター画像をアップロードして現在のユーザーに設定する"""
+    if file.content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="対応していない画像形式です（JPEG / PNG / WebP / GIF のみ）"
+        )
+    content = await file.read()
+    if len(content) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="ファイルが空です"
+        )
+    if len(content) > settings.AVATAR_MAX_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"ファイルサイズが大きすぎます（上限 {settings.AVATAR_MAX_BYTES // (1024 * 1024)}MB）"
+        )
+    url = save_avatar(content, file.content_type)
+    current_user.avatar = url
+    db.commit()
+    db.refresh(current_user)
+    return current_user
 
 
 @router.put("/me/password", status_code=status.HTTP_200_OK)
