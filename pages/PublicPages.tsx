@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { currentUser } from '../mockData';
 import { useAuth } from '../src/hooks/useAuth';
 import { useToast } from '../components/Toast';
 import * as userApi from '../src/api/users';
+import * as authApi from '../src/api/auth';
 import { getErrorMessage } from '../src/utils/errorHandler';
 
 export const Home: React.FC<{ onNavigate: (path: string) => void }> = ({ onNavigate }) => {
@@ -98,7 +99,12 @@ export const LoginPage: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const { login: handleLogin, register: handleRegister } = useAuth();
-  const { showInfo } = useToast();
+  const { showInfo, showSuccess, showError } = useToast();
+
+  // パスワードリセット用インラインフォームの状態
+  const [showResetForm, setShowResetForm] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [isResetSubmitting, setIsResetSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -117,6 +123,46 @@ export const LoginPage: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // パスワードリセット要求（バックエンドは常に成功を返す＝メール列挙防止）
+  const handlePasswordReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isResetSubmitting) return;
+    const trimmed = resetEmail.trim();
+    // 簡易バリデーション（未入力・不正な形式を弾く）
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      showError('有効なメールアドレスを入力してください');
+      return;
+    }
+    try {
+      setIsResetSubmitting(true);
+      await authApi.requestPasswordReset(trimmed);
+      showSuccess('パスワード再設定用のメールを送信しました。メールをご確認ください。');
+      setShowResetForm(false);
+      setResetEmail('');
+    } catch (err: any) {
+      showError(err.detail || err.message || 'パスワード再設定メールの送信に失敗しました');
+    } finally {
+      setIsResetSubmitting(false);
+    }
+  };
+
+  // Googleで続ける
+  // NOTE: Google Identity Services (GIS) SDK の読み込みと id_token の取得は未実装。
+  // VITE_GOOGLE_CLIENT_ID が設定されていれば、将来 GIS を初期化して id_token を取得し、
+  // authApi.googleLogin(idToken) を呼んでログインする（サーバー未設定時は 503）。
+  const handleGoogleLogin = () => {
+    const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+    if (!googleClientId) {
+      // クライアントIDが未設定＝正直に設定が必要な旨を案内
+      showInfo('Googleログインを利用するにはサーバー/クライアントの設定が必要です');
+      return;
+    }
+    // TODO: GIS SDK を読み込み・初期化し、id_token を取得したら
+    //       authApi.googleLogin(idToken) を呼んで onLogin() する。
+    //       SDK 統合が未完了のため、暫定的に案内を表示（無反応を避ける）。
+    showInfo('Googleログインの連携（GIS SDK）は現在準備中です');
   };
 
   return (
@@ -207,11 +253,51 @@ export const LoginPage: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
               </label>
               <button
                 type="button"
-                onClick={() => showInfo('パスワードリセット機能は現在準備中です')}
+                onClick={() => {
+                  setShowResetForm((prev) => !prev);
+                  // 未入力ならログイン中のユーザー名がメール形式のとき初期値として補完
+                  if (!resetEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(username)) {
+                    setResetEmail(username);
+                  }
+                }}
                 className="text-primary font-bold hover:underline"
               >
                 パスワードを忘れた場合
               </button>
+            </div>
+          )}
+
+          {!isRegistering && showResetForm && (
+            <div className="p-4 rounded-xl bg-gray-50 border border-gray-200 space-y-3">
+              <p className="text-sm font-bold text-text-light">パスワードの再設定</p>
+              <p className="text-xs text-text-muted">
+                ご登録のメールアドレスに、パスワード再設定用のリンクをお送りします。
+              </p>
+              <input
+                type="email"
+                value={resetEmail}
+                onChange={(e) => setResetEmail(e.target.value)}
+                placeholder="user@satotrip.com"
+                className="w-full p-3 rounded-xl bg-white border border-gray-200 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+              />
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={handlePasswordReset}
+                  disabled={isResetSubmitting}
+                  className="flex-1 bg-primary text-white py-2.5 rounded-xl font-bold hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                >
+                  {isResetSubmitting ? '送信中...' : '再設定メールを送信'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowResetForm(false)}
+                  disabled={isResetSubmitting}
+                  className="px-4 py-2.5 rounded-xl font-bold text-text-muted border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-50 transition-all"
+                >
+                  キャンセル
+                </button>
+              </div>
             </div>
           )}
 
@@ -230,7 +316,7 @@ export const LoginPage: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
 
           <button
             type="button"
-            onClick={() => showInfo('Googleログインは現在準備中です')}
+            onClick={handleGoogleLogin}
             className="w-full bg-white border border-gray-200 text-text-light py-3 rounded-xl font-bold hover:bg-gray-50 transition-all flex items-center justify-center gap-2"
           >
             <img src="https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg" className="w-5 h-5" alt="Google" />
@@ -295,13 +381,15 @@ export const NotFound: React.FC<{ onNavigate: (path: string) => void }> = ({ onN
 
 export const UserProfile: React.FC = () => {
   const { user, refreshUser } = useAuth();
-  const { showInfo } = useToast();
+  const { showSuccess, showError } = useToast();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [avatar, setAvatar] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -352,6 +440,29 @@ export const UserProfile: React.FC = () => {
     }
   };
 
+  // アバター画像アップロード
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    // 同じファイルを再選択しても onChange が発火するよう input をリセット
+    e.target.value = '';
+    if (!file || isUploadingAvatar) return;
+    try {
+      setIsUploadingAvatar(true);
+      setError(null);
+      const updatedUser = await userApi.uploadAvatar(file);
+      // 更新後の相対URLを表示用の絶対URLに変換して即時反映
+      setAvatar(updatedUser.avatar || '');
+      await refreshUser();
+      showSuccess('アイコンを更新しました');
+    } catch (err: any) {
+      console.error('Failed to upload avatar:', err);
+      // サイズ/形式エラーは detail を表示
+      showError(err.detail || err.message || 'アイコンのアップロードに失敗しました');
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-10">
@@ -375,15 +486,32 @@ export const UserProfile: React.FC = () => {
       )}
       <div className="bg-white rounded-2xl p-8 shadow-sm border border-gray-100 flex flex-col md:flex-row gap-8 items-center md:items-start">
         <div className="flex-shrink-0 flex flex-col items-center gap-4">
-          <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-gray-100">
-            <img src={avatar || currentUser.avatar} alt={name || currentUser.name} className="w-full h-full object-cover" />
+          <div className="relative w-32 h-32 rounded-full overflow-hidden border-4 border-gray-100">
+            <img
+              src={userApi.resolveAvatarUrl(avatar) || currentUser.avatar}
+              alt={name || currentUser.name}
+              className="w-full h-full object-cover"
+            />
+            {isUploadingAvatar && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                <div className="w-8 h-8 border-4 border-white border-t-transparent rounded-full animate-spin"></div>
+              </div>
+            )}
           </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleAvatarChange}
+            className="hidden"
+          />
           <button
             type="button"
-            onClick={() => showInfo('アイコンのアップロードは現在準備中です')}
-            className="text-primary text-sm font-bold hover:underline"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isUploadingAvatar}
+            className="text-primary text-sm font-bold hover:underline disabled:opacity-50 disabled:cursor-not-allowed disabled:no-underline"
           >
-            アイコンを変更
+            {isUploadingAvatar ? 'アップロード中...' : 'アイコンを変更'}
           </button>
         </div>
         <div className="flex-1 w-full space-y-6">
