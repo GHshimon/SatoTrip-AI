@@ -2428,7 +2428,7 @@ export const PlanEditor: React.FC<{ planId: string; onNavigate: (path: string) =
           <div className="bg-white rounded-xl p-6 shadow-sm">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold">1日目: ルート編集</h2>
-              <button className="text-text-muted hover:text-text-light"><span className="material-symbols-outlined">more_vert</span></button>
+              {/* 以前ここに機能未実装の「⋮」ボタンがあったが、開くメニューが存在せず無反応だったため削除（正直化） */}
             </div>
 
             <div className="space-y-4">
@@ -2466,11 +2466,27 @@ export const PlanEditor: React.FC<{ planId: string; onNavigate: (path: string) =
                       </div>
                     </div>
                   </div>
-                  {index < localPlanSpots.length - 1 && (
-                    <div className="flex justify-center text-sm text-text-muted font-medium py-2">
-                      <span className="material-symbols-outlined mr-1 text-base">directions_walk</span> 徒歩15分
-                    </div>
-                  )}
+                  {index < localPlanSpots.length - 1 && (() => {
+                    // 固定の「徒歩15分」表示ではなく、各スポットが保持する実際の移動手段・所要時間を表示（正直化）
+                    // transportMode/transportDuration は「このスポットから次のスポットへの移動」を表す
+                    const modeInfo: Record<string, { icon: string; label: string }> = {
+                      walk: { icon: 'directions_walk', label: '徒歩' },
+                      train: { icon: 'train', label: '電車' },
+                      bus: { icon: 'directions_bus', label: 'バス' },
+                      car: { icon: 'directions_car', label: '車' },
+                    };
+                    const info = item.transportMode ? modeInfo[item.transportMode] : undefined;
+                    const duration = item.transportDuration;
+                    // 実データが無い場合は誤解を招く固定値を出さず、移動アイコンのみを表示
+                    return (
+                      <div className="flex justify-center text-sm text-text-muted font-medium py-2">
+                        <span className="material-symbols-outlined mr-1 text-base">{info?.icon || 'more_vert'}</span>
+                        {info && duration != null
+                          ? `${info.label}${duration}分`
+                          : '移動'}
+                      </div>
+                    );
+                  })()}
                 </React.Fragment>
               ))}
 
