@@ -10,6 +10,7 @@ import { plans, currentUser } from './mockData';
 import { AppConfig } from './config';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import { ToastProvider } from './components/Toast';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 // Simple Hash Router Implementation
 const AppContent: React.FC = () => {
@@ -145,11 +146,13 @@ const AppContent: React.FC = () => {
 // Appコンポーネント（AuthProviderとToastProviderでラップ）
 const App: React.FC = () => {
   return (
-    <AuthProvider>
-      <ToastProvider>
-        <AppContent />
-      </ToastProvider>
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <ToastProvider>
+          <AppContent />
+        </ToastProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 };
 
