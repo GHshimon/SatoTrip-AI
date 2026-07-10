@@ -240,7 +240,7 @@ const SortableSpotItem: React.FC<SortableSpotItemProps> = ({
             <p className="text-text-muted text-sm mb-2 line-clamp-2">{spot.spot.description}</p>
             {/* SNS Tag Display */}
             <div className="flex gap-2 flex-wrap">
-              {spot.spot.tags && spot.spot.tags.length > 0 ? (
+              {Array.isArray(spot.spot.tags) && spot.spot.tags.length > 0 ? (
                 spot.spot.tags.map((tag, i) => {
                   // タグがオブジェクトの場合はvalueまたはnormalizedを使用、文字列の場合はそのまま使用
                   const tagText = typeof tag === 'string' ? tag : (tag?.value || tag?.normalized || String(tag));
@@ -1852,7 +1852,7 @@ export const PlanDetail: React.FC<{ planId: string; onNavigate: (path: string) =
                       <p className="text-text-muted text-sm mb-2 line-clamp-2">{pSpot.spot.description}</p>
                       {/* SNS Tag Display */}
                       <div className="flex gap-2 flex-wrap">
-                        {pSpot.spot.tags && pSpot.spot.tags.length > 0 ? (
+                        {Array.isArray(pSpot.spot.tags) && pSpot.spot.tags.length > 0 ? (
                           pSpot.spot.tags.map((tag, i) => {
                             // タグがオブジェクトの場合はvalueまたはnormalizedを使用、文字列の場合はそのまま使用
                             const tagText = typeof tag === 'string' ? tag : (tag?.value || tag?.normalized || String(tag));
