@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../src/hooks/useAuth';
+import { resolveAvatarUrl } from '../src/api/users';
 
 interface HeaderProps {
   onNavigate: (path: string) => void;
@@ -68,7 +69,7 @@ export const Header: React.FC<HeaderProps> = ({ onNavigate, currentPath, isAuthe
                <div className="relative">
                  <button onClick={() => setIsUserMenuOpen(!isUserMenuOpen)} className="w-10 h-10 rounded-full bg-gray-200 overflow-hidden border border-gray-300 focus:ring-2 focus:ring-primary focus:outline-none">
                    {user?.avatar ? (
-                     <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" />
+                     <img src={resolveAvatarUrl(user.avatar)} alt={user.name} className="w-full h-full object-cover" />
                    ) : (
                      <span className="material-symbols-outlined text-gray-400 flex items-center justify-center w-full h-full">person</span>
                    )}
