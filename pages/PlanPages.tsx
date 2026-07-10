@@ -7,6 +7,7 @@ import * as planApi from '../src/api/plans';
 import * as hotelApi from '../src/api/hotels';
 import * as spotApi from '../src/api/spots';
 import { SpotAddModal } from '../components/SpotAddModal';
+import WeavingLoader from '../components/design/WeavingLoader';
 import {
   DndContext,
   closestCenter,
@@ -761,34 +762,31 @@ export const CreatePlan: React.FC<{ onNavigate: (path: string) => void }> = ({ o
   };
 
   if (isGenerating) {
+    // 「しおりが編まれる」生成待ち画面（DESIGN_PROPOSAL §6 / WeavingLoader）
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-white px-4">
-        <div className="relative w-32 h-32 mb-8">
-          <div className="absolute inset-0 border-4 border-gray-100 rounded-full"></div>
-          <div className="absolute inset-0 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-          <div className="absolute inset-0 flex items-center justify-center">
-            <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuCfMSI_vEQcW6uWaOllfqi75Njj5epUUHan7iKYq2ddAZoSthgXSLKdhXLtyvGQeDOWHCvMIb9zHR29P6R1MHTCyE0GBmQFcmGptEhCWUuL8GTANN3rvEBzwrgvyl2srrrUMRms1iDYE5uxYWZET7_hlJDkiMX5A9SRf5w0qYmIJZMQq94roefVcSp5yXCk6-cjB3diA5SN8xBWRjHxaLVpf_bvPHdIi4cn84z3ACcaFosupiz3lF_kn0umIyl14BROFmriQ29o9iI" alt="Logo" className="w-16 h-16 animate-pulse" />
-          </div>
+      <div
+        className="min-h-screen flex flex-col items-center justify-center px-4"
+        style={{ background: 'var(--st-paper)', color: 'var(--st-ink)', fontFamily: 'var(--st-gothic)' }}
+      >
+        <div
+          style={{
+            border: '1px solid var(--st-line-strong)', borderRadius: 8,
+            background: 'var(--st-paper-2)', padding: 28, marginBottom: 24,
+          }}
+        >
+          <WeavingLoader size={260} />
         </div>
-        <h2 className="text-2xl font-bold mb-2 animate-pulse">{generationPhase}</h2>
-        <p className="text-text-muted mb-8 text-center max-w-md">
-          SatoTripの膨大な観光データベースから、{request.destination}の最適プランを構築中。<br />
-          事前に収集されたトレンド情報を活用しています。
+        <h2
+          aria-live="polite"
+          style={{ fontFamily: 'var(--st-serif)', fontWeight: 600, fontSize: 20, letterSpacing: '0.06em', color: 'var(--st-ai)', margin: '0 0 10px' }}
+        >
+          {generationPhase}
+        </h2>
+        <p style={{ color: 'var(--st-ink-soft)', textAlign: 'center', maxWidth: '42ch', fontSize: 14, lineHeight: 1.9, margin: 0 }}>
+          {request.destination}の一日を、一冊のしおりに編んでいます。
+          <br />
+          地元インサイダーの情報を織り込むため、少しだけお待ちください。
         </p>
-
-        <div className="w-full max-w-md bg-gray-100 rounded-full h-2 overflow-hidden">
-          <div className="h-full bg-primary animate-progress"></div>
-        </div>
-
-        <style>{`
-          @keyframes progress {
-            0% { width: 0%; }
-            100% { width: 100%; }
-          }
-          .animate-progress {
-            animation: progress 8s ease-in-out forwards;
-          }
-        `}</style>
       </div>
     );
   }

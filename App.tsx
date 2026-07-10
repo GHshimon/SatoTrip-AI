@@ -3,6 +3,8 @@ import { Layout } from './components/Shared';
 import { Home, NotFound, UserProfile, Settings, LoginPage } from './pages/PublicPages';
 import { PlanList, PrefectureSpots, HotelList, FavoriteSpots, MySpots } from './pages/FeaturePages';
 import { PlanDetail, PlanEditor, CreatePlan } from './pages/PlanPages';
+import { LandingPage } from './pages/LandingPage';
+import { DesignPreview } from './pages/DesignPreview';
 import { AdminDashboard, AdminUsers, AdminSpots, AdminAiSettings, AdminTags } from './pages/AdminPages';
 import { plans, currentUser } from './mockData';
 import { AppConfig } from './config';
@@ -53,8 +55,13 @@ const AppContent: React.FC = () => {
     // Auth Routes
     if (route === '/login') return <Layout onNavigate={navigate} currentPath={route} isAuthenticated={isAuthenticated} onLogout={onLogout}><LoginPage onLogin={handleLogin} /></Layout>;
 
+    // 新デザインのランディング（自前ヘッダを持つため Layout 外・DESIGN_PROPOSAL §8-3）
+    if (route === '/') return <LandingPage onNavigate={navigate} isAuthenticated={isAuthenticated} />;
+    // デザインシステムのレビュー用ショーケース（開発者向け）
+    if (route === '/design-preview') return <DesignPreview />;
+
     // Static Layout Routes
-    if (route === '/') return <Layout onNavigate={navigate} currentPath={route} isAuthenticated={isAuthenticated} onLogout={onLogout}><Home onNavigate={navigate} /></Layout>;
+    if (route === '/home') return <Layout onNavigate={navigate} currentPath={route} isAuthenticated={isAuthenticated} onLogout={onLogout}><Home onNavigate={navigate} /></Layout>;
     if (route === '/plans') return <Layout onNavigate={navigate} currentPath={route} isAuthenticated={isAuthenticated} onLogout={onLogout}><PlanList onNavigate={navigate} /></Layout>;
     if (route === '/myspots') return <Layout onNavigate={navigate} currentPath={route} isAuthenticated={isAuthenticated} onLogout={onLogout}><MySpots onNavigate={navigate} /></Layout>;
     if (route === '/favorites') return <Layout onNavigate={navigate} currentPath={route} isAuthenticated={isAuthenticated} onLogout={onLogout}><FavoriteSpots onNavigate={navigate} /></Layout>;
