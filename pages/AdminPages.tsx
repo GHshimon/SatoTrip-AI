@@ -1685,19 +1685,24 @@ export const AdminAiSettings: React.FC = () => {
   const [settings, setSettings] = useState<SystemSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchSettings = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const data = await getSystemSettings();
+      setSettings(data);
+    } catch (err: any) {
+      console.error('Failed to fetch settings:', err);
+      setError(err.detail || err.message || '設定の取得に失敗しました');
+      showError('設定の取得に失敗しました');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchSettings = async () => {
-      try {
-        const data = await getSystemSettings();
-        setSettings(data);
-      } catch (error) {
-        console.error('Failed to fetch settings:', error);
-        showError('設定の取得に失敗しました');
-      } finally {
-        setIsLoading(false);
-      }
-    };
     fetchSettings();
   }, []);
 
@@ -1715,7 +1720,26 @@ export const AdminAiSettings: React.FC = () => {
     }
   };
 
-  if (isLoading || !settings) return <div className="p-10 text-center">読み込み中...</div>;
+  if (isLoading) return <div className="p-10 text-center">読み込み中...</div>;
+
+  if (error || !settings) {
+    return (
+      <div className="p-6 md:p-10 bg-background-light min-h-full">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-red-700 flex flex-col items-start gap-4">
+          <div>
+            <p className="font-bold">読み込みに失敗しました</p>
+            <p>{error || '設定の取得に失敗しました'}</p>
+          </div>
+          <button
+            onClick={fetchSettings}
+            className="bg-red-500 text-white px-4 py-2 rounded-lg font-bold hover:opacity-80"
+          >
+            再試行
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 md:p-10 bg-background-light min-h-full">

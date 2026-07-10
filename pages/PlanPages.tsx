@@ -659,7 +659,7 @@ const LeafletMap: React.FC<{
     return () => {
       isMounted = false;
     };
-  }, [planSpots, selectedDay, areaName]);
+  }, [planSpots, selectedDay, areaName, visibleDays]);
 
   return <div ref={mapRef} className="w-full h-full rounded-2xl min-h-[400px] z-0" />;
 };
@@ -1683,7 +1683,7 @@ export const PlanDetail: React.FC<{ planId: string; onNavigate: (path: string) =
                   />
                 </div>
               </div>
-              {(checkInDate !== plan.checkInDate || checkOutDate !== plan.checkOutDate) && (
+              {((checkInDate || '') !== (plan.checkInDate || '') || (checkOutDate || '') !== (plan.checkOutDate || '')) && (
                 <button
                   onClick={async () => {
                     if (checkInDate && checkOutDate && checkInDate >= checkOutDate) {
@@ -1911,7 +1911,16 @@ export const PlanDetail: React.FC<{ planId: string; onNavigate: (path: string) =
             <button
               onClick={() => {
                 const baseUrl = "https://www.google.com/maps/dir/";
-                const destinations = currentDaySpots.map(s => s.spot.name).join("/");
+                const destinations = currentDaySpots
+                  .map(s => {
+                    const loc = s.spot.location;
+                    // 座標があれば精度の高い緯度,経度を使用。無ければ名前をエンコード
+                    if (loc && typeof loc.lat === 'number' && typeof loc.lng === 'number') {
+                      return `${loc.lat},${loc.lng}`;
+                    }
+                    return encodeURIComponent(s.spot.name);
+                  })
+                  .join("/");
                 window.open(`${baseUrl}${destinations}`, '_blank');
               }}
               className="flex items-center gap-2 bg-white border border-gray-300 px-6 py-3 rounded-full font-bold hover:bg-gray-50 transition-colors shadow-sm"

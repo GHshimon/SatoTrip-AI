@@ -120,7 +120,8 @@ export const PlanList: React.FC<{ onNavigate: (path: string) => void }> = ({ onN
       await planApi.updatePlan(plan.id, { is_favorite: newStatus });
     } catch (err) {
       console.error('Failed to update favorite:', err);
-      setPlansList(prev => prev.map(p => p.id === plan.id ? { ...p, isFavorite: !plan.isFavorite } : p));
+      // ロールバック: 楽観的更新を取り消し、元の値に戻す
+      setPlansList(prev => prev.map(p => p.id === plan.id ? { ...p, isFavorite: plan.isFavorite } : p));
       showError('お気に入りの更新に失敗しました');
     }
   };

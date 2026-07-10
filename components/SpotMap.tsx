@@ -1,6 +1,11 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Spot } from '../types';
 import { AppConfig } from '../config';
+
+// Escape HTML special characters to prevent XSS when injecting
+// external/AI-derived strings into Leaflet popup HTML.
+const escapeHtml = (s: string) =>
+    s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 
 interface SpotMapProps {
     spots: Spot[];
@@ -28,51 +33,89 @@ export const SpotMap: React.FC<SpotMapProps> = ({
     const mapInstanceRef = useRef<any>(null);
     const clusterGroupRef = useRef<any>(null);
     const initializedRef = useRef(false);
+    const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
 
     // Initialize Map
     useEffect(() => {
-        if (!window.L || !mapRef.current || initializedRef.current) return;
+        let cancelled = false;
+        let pollId: ReturnType<typeof setInterval> | undefined;
+        let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
-        try {
-            const L = window.L;
+        const clearTimers = () => {
+            if (pollId !== undefined) { clearInterval(pollId); pollId = undefined; }
+            if (timeoutId !== undefined) { clearTimeout(timeoutId); timeoutId = undefined; }
+        };
 
-            // Create map instance
-            const map = L.map(mapRef.current).setView(initialCenter, initialZoom);
+        const initMap = (): boolean => {
+            if (cancelled || !mapRef.current || initializedRef.current) return false;
 
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-            }).addTo(map);
+            try {
+                const L = window.L;
 
-            // Create cluster group
-            if (L.markerClusterGroup) {
-                const clusterGroup = L.markerClusterGroup({
-                    showCoverageOnHover: false,
-                    maxClusterRadius: 50,
-                    spiderfyOnMaxZoom: true,
-                    disableClusteringAtZoom: 16
-                });
-                map.addLayer(clusterGroup);
-                clusterGroupRef.current = clusterGroup;
-            } else {
-                console.warn('Leaflet.markercluster not found, falling back to simple layer group');
-                const layerGroup = L.layerGroup().addTo(map);
-                clusterGroupRef.current = layerGroup;
+                // Create map instance
+                const map = L.map(mapRef.current).setView(initialCenter, initialZoom);
+
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                }).addTo(map);
+
+                // Create cluster group
+                if (L.markerClusterGroup) {
+                    const clusterGroup = L.markerClusterGroup({
+                        showCoverageOnHover: false,
+                        maxClusterRadius: 50,
+                        spiderfyOnMaxZoom: true,
+                        disableClusteringAtZoom: 16
+                    });
+                    map.addLayer(clusterGroup);
+                    clusterGroupRef.current = clusterGroup;
+                } else {
+                    console.warn('Leaflet.markercluster not found, falling back to simple layer group');
+                    const layerGroup = L.layerGroup().addTo(map);
+                    clusterGroupRef.current = layerGroup;
+                }
+
+                mapInstanceRef.current = map;
+                initializedRef.current = true;
+                setStatus('ready');
+            } catch (error) {
+                console.error('Failed to initialize map', error);
+                setStatus('error');
             }
+            // Return true to signal we're done attempting (success or hard error).
+            return true;
+        };
 
-            mapInstanceRef.current = map;
-            initializedRef.current = true;
-
-        } catch (error) {
-            console.error('Failed to initialize map', error);
+        if (window.L) {
+            initMap();
+        } else {
+            // Leaflet CDN may not be loaded yet on mount; poll until available.
+            pollId = setInterval(() => {
+                if (cancelled) { clearTimers(); return; }
+                if (window.L) {
+                    clearTimers();
+                    initMap();
+                }
+            }, 100);
+            // Give up after 10s to avoid a permanent loading state.
+            timeoutId = setTimeout(() => {
+                clearTimers();
+                if (!cancelled && !initializedRef.current) {
+                    console.error('Leaflet (window.L) did not load in time');
+                    setStatus('error');
+                }
+            }, 10000);
         }
 
         return () => {
-            // Cleanup on unmount is tricky with React double-mount effect in dev
-            // Better to rely on ref checks
-            if (mapInstanceRef.current && !initializedRef.current) {
+            cancelled = true;
+            clearTimers();
+            if (mapInstanceRef.current) {
                 mapInstanceRef.current.remove();
                 mapInstanceRef.current = null;
             }
+            clusterGroupRef.current = null;
+            initializedRef.current = false;
         };
     }, []);
 
@@ -117,13 +160,17 @@ export const SpotMap: React.FC<SpotMapProps> = ({
 
                 const marker = L.marker([lat, lng], { icon, title: spot.name });
 
+                const descText = spot.description
+                    ? `${spot.description.substring(0, 100)}${spot.description.length > 100 ? '...' : ''}`
+                    : '';
+
                 const popupContent = `
           <div class="text-center p-2" style="min-width: 200px;">
-            <b class="text-lg">${spot.name}</b>
-            ${spot.area ? `<br/><span class="text-xs text-gray-500">📍 ${spot.area}</span>` : ''}
-            <br/><span class="text-xs text-gray-500">${spot.category}</span>
-            ${spot.image ? `<br/><img src="${spot.image}" style="width:100%; height:100px; object-fit:cover; margin-top:5px; border-radius:4px;" />` : ''}
-            ${spot.description ? `<br/><p class="text-xs text-gray-600 mt-1 text-left">${spot.description.substring(0, 100)}${spot.description.length > 100 ? '...' : ''}</p>` : ''}
+            <b class="text-lg">${escapeHtml(spot.name)}</b>
+            ${spot.area ? `<br/><span class="text-xs text-gray-500">📍 ${escapeHtml(spot.area)}</span>` : ''}
+            <br/><span class="text-xs text-gray-500">${escapeHtml(spot.category)}</span>
+            ${spot.image ? `<br/><img src="${escapeHtml(spot.image)}" style="width:100%; height:100px; object-fit:cover; margin-top:5px; border-radius:4px;" />` : ''}
+            ${spot.description ? `<br/><p class="text-xs text-gray-600 mt-1 text-left">${escapeHtml(descText)}</p>` : ''}
           </div>
         `;
 
@@ -148,14 +195,19 @@ export const SpotMap: React.FC<SpotMapProps> = ({
             }
         }
 
-    }, [spots]);
+    }, [spots, status]);
 
     return (
         <div className="relative w-full rounded-2xl overflow-hidden shadow-inner border border-gray-200 z-0" style={{ height }}>
             <div ref={mapRef} className="w-full h-full" style={{ background: '#f0f0f0' }}></div>
-            {(!window.L) && (
+            {status === 'loading' && (
                 <div className="absolute inset-0 flex items-center justify-center bg-gray-100/80">
                     <p>マップを読み込み中...</p>
+                </div>
+            )}
+            {status === 'error' && (
+                <div className="absolute inset-0 flex items-center justify-center bg-gray-100/80">
+                    <p>マップの読み込みに失敗しました。</p>
                 </div>
             )}
         </div>
