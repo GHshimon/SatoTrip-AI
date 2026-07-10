@@ -1,218 +1,162 @@
 <style>
   :root {
-    /* ── Light: 錦江湾の紙 (bay paper) ── */
-    --ground: #E9EDE6;
-    --surface: #FAFBF7;
-    --surface-2: #F1F4EC;
-    --ink: #14302A;
-    --ink-soft: #4C5D56;
-    --line: #D2D9CE;
-    --line-strong: #BCC6B9;
-    --primary: #0E5C63;      /* 深い湾の藍緑 */
-    --primary-deep: #0A464B;
-    --accent: #D85F32;       /* 桜島の残照（柿・朱） */
-    --accent-soft: #F3E3D6;
-    --moss: #5F8767;         /* 苔・自然 */
-    --gold: #B0863A;         /* 真鍮 */
-    --shadow: 20px 30px 60px -30px rgba(20,48,42,.28);
-    --shadow-sm: 0 2px 10px -4px rgba(20,48,42,.22);
-    --maxw: 1120px;
+    /* ── 全国で通用するブランド基調（地域色に縛らない中立の紙とインク） ── */
+    --ground: #ECEDE8;
+    --surface: #FBFBF8;
+    --surface-2: #F2F3EE;
+    --ink: #21262A;          /* 炭のインク（CTAもこの色。色はカテゴリに任せる） */
+    --ink-soft: #5B6469;
+    --line: #DBDCD5;
+    --line-strong: #C6C8BF;
+    --brand: #274690;        /* 藍：ブランドマーク・リンク（全国・信頼） */
+    --signal: #21262A;       /* 主要CTAは炭（周辺を静かに、色は趣味が主役） */
+    --shadow: 18px 28px 56px -30px rgba(33,38,42,.26);
+    --shadow-sm: 0 2px 10px -4px rgba(33,38,42,.20);
+    --maxw: 1140px;
     --font-jp: "Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic",YuGothic,"Noto Sans JP",sans-serif;
+    --font-mincho: "Hiragino Mincho ProN","Yu Mincho",YuMincho,"Noto Serif JP",serif;
     --font-mono: ui-monospace,"SF Mono","Menlo","Roboto Mono",monospace;
+
+    /* ── 趣味カテゴリのカテゴリカル・パレット（検索の主役・意味＝色） ── */
+    --c-touring: #4E6E8E;  --c-cafe: #B5793C;  --c-sauna: #2F8E8E;  --c-photo: #C0567E;
+    --c-history: #9A7B3C;  --c-nature: #5C8A5A; --c-gourmet:#C64B37; --c-art: #7A5AA6;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      /* ── Dark: 火山の夜 (volcanic night) ── */
-      --ground: #0E1512;
-      --surface: #14201B;
-      --surface-2: #1A2822;
-      --ink: #E7ECE3;
-      --ink-soft: #9BACA1;
-      --line: #27352E;
-      --line-strong: #354740;
-      --primary: #3FA0A6;
-      --primary-deep: #2C7d83;
-      --accent: #E77A4A;
-      --accent-soft: #33231b;
-      --moss: #7FA986;
-      --gold: #CBA255;
-      --shadow: 24px 34px 70px -34px rgba(0,0,0,.6);
-      --shadow-sm: 0 2px 12px -4px rgba(0,0,0,.5);
+      --ground: #14171A; --surface: #1B1F23; --surface-2: #222831;
+      --ink: #E9EAE6; --ink-soft: #99A2A6; --line: #2A3138; --line-strong: #3A424A;
+      --brand: #7FA0D9; --signal: #E9EAE6;
+      --shadow: 24px 34px 70px -34px rgba(0,0,0,.6); --shadow-sm: 0 2px 12px -4px rgba(0,0,0,.5);
+      --c-touring:#6E92B4; --c-cafe:#D69B5C; --c-sauna:#4FB3B0; --c-photo:#E07AA0;
+      --c-history:#C2A055; --c-nature:#7FB07C; --c-gourmet:#E4735C; --c-art:#A184CC;
     }
   }
-  :root[data-theme="light"] {
-    --ground: #E9EDE6; --surface: #FAFBF7; --surface-2: #F1F4EC;
-    --ink: #14302A; --ink-soft: #4C5D56; --line: #D2D9CE; --line-strong:#BCC6B9;
-    --primary:#0E5C63; --primary-deep:#0A464B; --accent:#D85F32; --accent-soft:#F3E3D6;
-    --moss:#5F8767; --gold:#B0863A;
-    --shadow:20px 30px 60px -30px rgba(20,48,42,.28); --shadow-sm:0 2px 10px -4px rgba(20,48,42,.22);
-  }
-  :root[data-theme="dark"] {
-    --ground:#0E1512; --surface:#14201B; --surface-2:#1A2822;
-    --ink:#E7ECE3; --ink-soft:#9BACA1; --line:#27352E; --line-strong:#354740;
-    --primary:#3FA0A6; --primary-deep:#2C7d83; --accent:#E77A4A; --accent-soft:#33231b;
-    --moss:#7FA986; --gold:#CBA255;
-    --shadow:24px 34px 70px -34px rgba(0,0,0,.6); --shadow-sm:0 2px 12px -4px rgba(0,0,0,.5);
-  }
+  :root[data-theme="light"]{ --ground:#ECEDE8;--surface:#FBFBF8;--surface-2:#F2F3EE;--ink:#21262A;--ink-soft:#5B6469;--line:#DBDCD5;--line-strong:#C6C8BF;--brand:#274690;--signal:#21262A;--shadow:18px 28px 56px -30px rgba(33,38,42,.26);--shadow-sm:0 2px 10px -4px rgba(33,38,42,.20);--c-touring:#4E6E8E;--c-cafe:#B5793C;--c-sauna:#2F8E8E;--c-photo:#C0567E;--c-history:#9A7B3C;--c-nature:#5C8A5A;--c-gourmet:#C64B37;--c-art:#7A5AA6; }
+  :root[data-theme="dark"]{ --ground:#14171A;--surface:#1B1F23;--surface-2:#222831;--ink:#E9EAE6;--ink-soft:#99A2A6;--line:#2A3138;--line-strong:#3A424A;--brand:#7FA0D9;--signal:#E9EAE6;--shadow:24px 34px 70px -34px rgba(0,0,0,.6);--shadow-sm:0 2px 12px -4px rgba(0,0,0,.5);--c-touring:#6E92B4;--c-cafe:#D69B5C;--c-sauna:#4FB3B0;--c-photo:#E07AA0;--c-history:#C2A055;--c-nature:#7FB07C;--c-gourmet:#E4735C;--c-art:#A184CC; }
 
   * { box-sizing: border-box; }
   html { scroll-behavior: smooth; }
   body {
-    margin: 0; background: var(--ground); color: var(--ink);
-    font-family: var(--font-jp); line-height: 1.7;
-    -webkit-font-smoothing: antialiased;
-    /* うっすらと等高線（地図）テクスチャ */
+    margin: 0; background: var(--ground); color: var(--ink); font-family: var(--font-jp);
+    line-height: 1.7; -webkit-font-smoothing: antialiased;
     background-image:
-      radial-gradient(120% 90% at 82% -10%, color-mix(in srgb, var(--primary) 9%, transparent), transparent 55%),
-      radial-gradient(90% 70% at -10% 8%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 50%);
+      radial-gradient(120% 80% at 88% -10%, color-mix(in srgb, var(--brand) 7%, transparent), transparent 55%),
+      radial-gradient(80% 60% at -8% 4%, color-mix(in srgb, var(--c-cafe) 7%, transparent), transparent 52%);
     background-attachment: fixed;
   }
   .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 24px; }
   .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
-  .eyebrow {
-    font-family: var(--font-mono); font-size: 11.5px; letter-spacing: .22em;
-    text-transform: uppercase; color: var(--primary); font-weight: 600;
-    display: inline-flex; align-items: center; gap: 9px;
-  }
-  .eyebrow::before { content:""; width: 22px; height: 1px; background: currentColor; opacity:.6; }
-  h1,h2,h3 { text-wrap: balance; margin: 0; letter-spacing: -.02em; font-weight: 800; }
-  a { color: inherit; }
-  .btn {
-    font-family: var(--font-jp); font-weight: 700; font-size: 15px; border: 0; cursor: pointer;
-    padding: 13px 22px; border-radius: 999px; display: inline-flex; align-items: center; gap: 8px;
-    transition: transform .15s ease, box-shadow .2s ease, background .2s ease;
-  }
-  .btn-primary { background: var(--accent); color: #fff; box-shadow: 0 10px 24px -10px color-mix(in srgb, var(--accent) 70%, transparent); }
+  .eyebrow { font-family: var(--font-mono); font-size: 11.5px; letter-spacing: .2em; text-transform: uppercase; color: var(--brand); font-weight: 600; display: inline-flex; align-items: center; gap: 9px; }
+  .eyebrow::before { content:""; width: 22px; height: 1px; background: currentColor; opacity:.55; }
+  h1,h2,h3,h4 { text-wrap: balance; margin: 0; letter-spacing: -.02em; font-weight: 800; }
+  a { color: var(--brand); }
+  .btn { font-family: var(--font-jp); font-weight: 700; font-size: 15px; border: 0; cursor: pointer; padding: 13px 22px; border-radius: 12px; display: inline-flex; align-items: center; gap: 8px; transition: transform .15s ease, box-shadow .2s ease; }
+  .btn-primary { background: var(--signal); color: var(--ground); box-shadow: var(--shadow-sm); }
   .btn-primary:hover { transform: translateY(-2px); }
   .btn-ghost { background: transparent; color: var(--ink); border: 1px solid var(--line-strong); }
-  .btn-ghost:hover { border-color: var(--primary); color: var(--primary); }
-  .chip {
-    font-family: var(--font-mono); font-size: 11px; letter-spacing: .04em;
-    padding: 4px 10px; border-radius: 999px; background: var(--surface-2);
-    border: 1px solid var(--line); color: var(--ink-soft); display:inline-flex; gap:6px; align-items:center;
-  }
+  .btn-ghost:hover { border-color: var(--brand); color: var(--brand); }
 
-  /* ── Top bar ── */
-  header.top {
-    position: sticky; top: 0; z-index: 20; backdrop-filter: blur(10px);
-    background: color-mix(in srgb, var(--ground) 82%, transparent);
-    border-bottom: 1px solid var(--line);
-  }
+  /* facet chip (趣味) */
+  .facet { --c: var(--brand); font-family: var(--font-jp); font-weight: 700; font-size: 14px; padding: 9px 15px 9px 13px; border-radius: 999px; border: 1.5px solid color-mix(in srgb, var(--c) 40%, var(--line)); background: color-mix(in srgb, var(--c) 8%, var(--surface)); color: color-mix(in srgb, var(--c) 72%, var(--ink)); display: inline-flex; align-items: center; gap: 8px; cursor: pointer; transition: transform .12s ease, background .15s ease; }
+  .facet:hover { transform: translateY(-2px); background: color-mix(in srgb, var(--c) 15%, var(--surface)); }
+  .facet .ic { font-size: 15px; }
+
+  header.top { position: sticky; top: 0; z-index: 20; backdrop-filter: blur(10px); background: color-mix(in srgb, var(--ground) 84%, transparent); border-bottom: 1px solid var(--line); }
   .top .wrap { display: flex; align-items: center; gap: 18px; height: 66px; }
-  .brand { display: flex; align-items: baseline; gap: 10px; font-weight: 800; font-size: 20px; letter-spacing: -.03em; }
-  .brand .dot { color: var(--accent); }
-  .coord { margin-left: 6px; color: var(--ink-soft); font-size: 11px; }
-  .top nav { margin-left: auto; display: flex; gap: 26px; align-items: center; }
+  .brand { display: flex; align-items: baseline; gap: 3px; font-weight: 800; font-size: 21px; letter-spacing: -.03em; color: var(--ink); }
+  .brand .b { color: var(--brand); }
+  .top nav { margin-left: auto; display: flex; gap: 24px; align-items: center; }
   .top nav a { font-size: 14px; color: var(--ink-soft); text-decoration: none; font-weight: 600; }
   .top nav a:hover { color: var(--ink); }
-  .toggle {
-    width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line-strong);
-    background: var(--surface); cursor: pointer; color: var(--ink); font-size: 16px; line-height:1;
-  }
+  .toggle { width: 40px; height: 40px; border-radius: 10px; border: 1px solid var(--line-strong); background: var(--surface); cursor: pointer; color: var(--ink); font-size: 16px; }
 
-  /* ── Hero ── */
-  .hero { padding: 74px 0 40px; }
-  .hero-grid { display: grid; grid-template-columns: 1.05fr .95fr; gap: 52px; align-items: center; }
-  .hero h1 { font-size: clamp(34px, 5vw, 58px); line-height: 1.08; }
-  .hero h1 .hl { color: var(--primary); }
-  .hero p.lead { font-size: 18px; color: var(--ink-soft); max-width: 46ch; margin: 22px 0 30px; }
+  .hero { padding: 64px 0 30px; }
+  .hero h1 { font-size: clamp(32px, 5vw, 56px); line-height: 1.1; }
+  .hero h1 .u { background: linear-gradient(transparent 62%, color-mix(in srgb,var(--c-cafe) 45%,transparent) 62%); }
+  .hero p.lead { font-size: 18px; color: var(--ink-soft); max-width: 50ch; margin: 20px 0 24px; }
+  .facet-row { display: flex; gap: 10px; flex-wrap: wrap; margin: 6px 0 26px; }
   .hero-cta { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
-  .hero-meta { margin-top: 26px; display: flex; gap: 22px; flex-wrap: wrap; }
-  .hero-meta div { display: flex; flex-direction: column; }
-  .hero-meta b { font-family: var(--font-mono); font-size: 22px; letter-spacing: -.02em; }
-  .hero-meta span { font-size: 12px; color: var(--ink-soft); }
 
-  /* itinerary preview card (hero thesis) */
-  .plan-card {
-    background: var(--surface); border: 1px solid var(--line); border-radius: 22px;
-    box-shadow: var(--shadow); overflow: hidden;
-  }
-  .plan-head { padding: 20px 22px; border-bottom: 1px dashed var(--line-strong); display:flex; align-items:center; gap:12px; }
-  .plan-head .badge { width:42px;height:42px;border-radius:12px; background: var(--primary); color:#fff; display:grid;place-items:center; font-weight:800; }
-  .plan-head .t b { display:block; font-size: 16px; }
-  .plan-head .t span { font-size: 12px; color: var(--ink-soft); }
-  .plan-head .live { margin-left:auto; font-family:var(--font-mono); font-size:10.5px; color: var(--moss); display:flex; align-items:center; gap:6px; }
-  .plan-head .live::before { content:""; width:7px;height:7px;border-radius:50%; background: var(--moss); box-shadow:0 0 0 0 color-mix(in srgb,var(--moss) 60%,transparent); animation: pulse 2.2s infinite; }
-  @keyframes pulse { 0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--moss) 55%,transparent);} 70%{box-shadow:0 0 0 8px transparent;} 100%{box-shadow:0 0 0 0 transparent;} }
+  section { padding: 58px 0; }
+  .sec-head { max-width: 680px; margin-bottom: 34px; }
+  .sec-head h2 { font-size: clamp(25px, 3.3vw, 36px); margin-top: 12px; }
+  .sec-head p { color: var(--ink-soft); font-size: 16px; margin: 12px 0 0; }
 
-  /* ── Timeline (the product's core) ── */
-  .timeline { padding: 8px 22px 20px; position: relative; }
-  .stop { display: grid; grid-template-columns: 58px 1fr; gap: 4px; }
-  .stop .time { font-family: var(--font-mono); font-size: 13px; color: var(--primary); font-weight: 600; padding-top: 16px; }
-  .stop .node { position: relative; padding: 14px 0 14px 22px; }
-  .stop .node::before { /* the drawn route line */
-    content:""; position:absolute; left: 5px; top: 20px; bottom: -14px; width: 2px;
-    background: repeating-linear-gradient(var(--line-strong) 0 5px, transparent 5px 10px);
-  }
-  .stop:last-child .node::before { display:none; }
-  .stop .node::after { content:""; position:absolute; left:0; top: 18px; width: 12px; height: 12px; border-radius:50%; background: var(--surface); border: 2px solid var(--primary); }
-  .stop.food .node::after { border-color: var(--accent); }
-  .stop .card2 { background: var(--surface-2); border:1px solid var(--line); border-radius: 14px; padding: 12px 14px; display:flex; gap:12px; align-items:center; }
-  .stop .card2 .thumb { width: 46px; height: 46px; border-radius: 10px; flex: 0 0 auto; display:grid; place-items:center; font-size: 20px; }
-  .stop .card2 h4 { margin:0; font-size: 15px; font-weight: 700; }
-  .stop .card2 p { margin: 2px 0 0; font-size: 12px; color: var(--ink-soft); }
-  .stop .card2 .dur { margin-left:auto; text-align:right; }
-  .stop .card2 .dur b { font-family: var(--font-mono); font-size: 13px; }
-  .stop .card2 .dur span { display:block; font-size:10.5px; color: var(--ink-soft); }
-  .leg { grid-column: 2; margin-left: 22px; font-family: var(--font-mono); font-size: 11px; color: var(--ink-soft); padding: 2px 0 2px 2px; display:flex; align-items:center; gap:7px; }
+  /* interest grid */
+  .interests { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; }
+  .interest { --c: var(--brand); background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--c); border-radius: 14px; padding: 18px 16px; cursor: pointer; transition: transform .15s ease, box-shadow .2s ease; }
+  .interest:hover { transform: translateY(-3px); box-shadow: var(--shadow); }
+  .interest .ic { font-size: 24px; }
+  .interest h4 { margin: 10px 0 3px; font-size: 16px; }
+  .interest p { margin: 0; font-size: 12px; color: var(--ink-soft); }
+  .interest .n { font-family: var(--font-mono); font-size: 11px; color: var(--c); font-weight: 700; }
 
-  /* ── Sections ── */
-  section { padding: 62px 0; }
-  .sec-head { max-width: 640px; margin-bottom: 40px; }
-  .sec-head h2 { font-size: clamp(26px, 3.4vw, 38px); margin-top: 14px; }
-  .sec-head p { color: var(--ink-soft); font-size: 16px; margin: 14px 0 0; }
+  /* niche plan examples (two regions / two hobbies) */
+  .examples { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+  .plan { --c: var(--brand); background: var(--surface); border: 1px solid var(--line); border-radius: 20px; overflow: hidden; box-shadow: var(--shadow); }
+  .plan-h { padding: 18px 20px; border-bottom: 1px dashed var(--line-strong); display: flex; align-items: center; gap: 12px; }
+  .plan-h .tag { width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center; font-size: 19px; background: color-mix(in srgb,var(--c) 16%, var(--surface)); }
+  .plan-h b { display: block; font-size: 16px; }
+  .plan-h span { font-size: 12px; color: var(--ink-soft); }
+  .plan-h .region { margin-left: auto; font-family: var(--font-mono); font-size: 10.5px; color: var(--c); border:1px solid color-mix(in srgb,var(--c) 35%,var(--line)); padding: 3px 8px; border-radius: 999px; }
+  .tl { padding: 6px 20px 4px; }
+  .stop { display: grid; grid-template-columns: 52px 1fr; }
+  .stop .t { font-family: var(--font-mono); font-size: 12.5px; color: var(--c); font-weight: 600; padding-top: 15px; }
+  .stop .nd { position: relative; padding: 12px 0 12px 20px; }
+  .stop .nd::before { content:""; position:absolute; left:5px; top:19px; bottom:-12px; width:2px; background: repeating-linear-gradient(var(--line-strong) 0 5px, transparent 5px 10px); }
+  .stop:last-child .nd::before { display:none; }
+  .stop .nd::after { content:""; position:absolute; left:0; top:17px; width:12px; height:12px; border-radius:50%; background: var(--surface); border:2px solid var(--c); }
+  .stop .row { display:flex; gap:10px; align-items:center; }
+  .stop h5 { margin:0; font-size:14.5px; font-weight:700; }
+  .stop small { color: var(--ink-soft); font-size: 11.5px; }
+  .leg { grid-column:2; margin-left:20px; font-family: var(--font-mono); font-size: 11px; color: var(--ink-soft); padding: 1px 0 1px 2px; }
+  /* 地元の声（明朝で人の声） */
+  .local { margin: 6px 20px 18px; padding: 12px 15px; border-radius: 12px; background: color-mix(in srgb,var(--c) 8%, var(--surface-2)); border: 1px solid color-mix(in srgb,var(--c) 22%, var(--line)); }
+  .local .lb { font-family: var(--font-mono); font-size: 10px; letter-spacing:.12em; text-transform: uppercase; color: var(--c); font-weight: 700; display:flex; align-items:center; gap:6px; }
+  .local q { display:block; font-family: var(--font-mincho); font-size: 15px; line-height: 1.75; margin-top: 6px; color: var(--ink); }
+  .local cite { display:block; margin-top: 6px; font-style: normal; font-size: 11.5px; color: var(--ink-soft); }
+  .badge-hole { font-family: var(--font-mono); font-size: 10px; font-weight:700; letter-spacing:.06em; color: var(--c-gourmet); border:1px solid color-mix(in srgb,var(--c-gourmet) 40%,var(--line)); background: color-mix(in srgb,var(--c-gourmet) 8%,transparent); padding: 2px 7px; border-radius: 999px; }
 
-  .steps { display: grid; grid-template-columns: repeat(3,1fr); gap: 20px; }
-  .step { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 26px 22px; position: relative; }
-  .step .n { font-family: var(--font-mono); font-size: 12px; color: var(--accent); font-weight: 700; letter-spacing:.1em; }
-  .step h3 { font-size: 19px; margin: 12px 0 8px; }
-  .step p { margin: 0; font-size: 14px; color: var(--ink-soft); }
-  .step .ic { font-size: 24px; margin-top: 14px; display:block; }
+  /* local-first strip */
+  .localfirst { background: var(--surface); border: 1px solid var(--line); border-radius: 22px; padding: 30px; display:grid; grid-template-columns: 1.1fr 1fr; gap: 30px; align-items:center; }
+  .localfirst ul { margin: 14px 0 0; padding: 0; list-style: none; display:grid; gap: 12px; }
+  .localfirst li { display:flex; gap: 11px; font-size: 14.5px; }
+  .localfirst li .ic { color: var(--brand); }
+  .lf-quote { border-left: 3px solid var(--c-nature); padding: 6px 0 6px 16px; }
+  .lf-quote q { font-family: var(--font-mincho); font-size: 17px; line-height: 1.8; }
+  .lf-quote cite { font-style: normal; font-size: 12px; color: var(--ink-soft); display:block; margin-top: 8px; }
 
-  .gallery { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; }
-  .spot { border-radius: 18px; overflow: hidden; background: var(--surface); border: 1px solid var(--line); transition: transform .2s ease, box-shadow .2s ease; }
-  .spot:hover { transform: translateY(-4px); box-shadow: var(--shadow); }
-  .spot .ph { height: 128px; display: grid; place-items: center; font-size: 40px; position: relative; }
-  .spot .ph .tag { position:absolute; top:10px; left:10px; }
-  .spot .body { padding: 14px 15px 16px; }
-  .spot .body h4 { margin: 0; font-size: 15.5px; }
-  .spot .body .meta { margin-top: 6px; display: flex; align-items:center; gap: 8px; font-size: 12px; color: var(--ink-soft); }
-  .spot .body .meta .star { color: var(--gold); font-family: var(--font-mono); }
-
-  /* ── Design system spec ── */
+  /* spec */
   .spec { background: var(--surface); border: 1px solid var(--line); border-radius: 22px; padding: 30px; }
-  .swatches { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
-  .sw { border-radius: 12px; overflow: hidden; border: 1px solid var(--line); }
-  .sw .col { height: 64px; }
-  .sw .lab { padding: 8px 10px; font-family: var(--font-mono); font-size: 10.5px; color: var(--ink-soft); }
-  .sw .lab b { display:block; color: var(--ink); font-size: 11px; letter-spacing: -.01em; }
-  .type-rows { margin-top: 26px; display: grid; gap: 14px; }
-  .type-row { display:flex; align-items: baseline; gap: 18px; border-top: 1px solid var(--line); padding-top: 14px; }
-  .type-row .k { font-family: var(--font-mono); font-size: 11px; color: var(--ink-soft); width: 130px; flex:0 0 auto; }
+  .swatches { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .sw { border-radius: 11px; overflow: hidden; border: 1px solid var(--line); }
+  .sw .col { height: 52px; }
+  .sw .lab { padding: 7px 9px; font-family: var(--font-mono); font-size: 10px; color: var(--ink-soft); }
+  .sw .lab b { display:block; color: var(--ink); font-size: 11px; }
+  .type-rows { margin-top: 24px; display: grid; gap: 12px; }
+  .type-row { display:flex; align-items: baseline; gap: 16px; border-top: 1px solid var(--line); padding-top: 12px; }
+  .type-row .k { font-family: var(--font-mono); font-size: 11px; color: var(--ink-soft); width: 150px; flex:0 0 auto; }
 
-  footer { border-top: 1px solid var(--line); padding: 34px 0 60px; color: var(--ink-soft); font-size: 13px; }
+  footer { border-top: 1px solid var(--line); padding: 30px 0 56px; color: var(--ink-soft); font-size: 13px; }
   footer .wrap { display:flex; gap: 16px; align-items:center; flex-wrap: wrap; }
-  footer .brand { color: var(--ink); font-size: 16px; }
 
-  @media (max-width: 900px) {
-    .hero-grid { grid-template-columns: 1fr; gap: 36px; }
-    .steps { grid-template-columns: 1fr; }
-    .gallery { grid-template-columns: repeat(2,1fr); }
-    .swatches { grid-template-columns: repeat(3,1fr); }
-    .top nav a:not(.cta-mini) { display: none; }
+  @media (max-width: 920px) {
+    .interests { grid-template-columns: repeat(2,1fr); }
+    .examples { grid-template-columns: 1fr; }
+    .localfirst { grid-template-columns: 1fr; }
+    .swatches { grid-template-columns: repeat(2,1fr); }
+    .top nav a { display:none; }
   }
-  @media (prefers-reduced-motion: reduce) {
-    * { animation: none !important; scroll-behavior: auto !important; transition: none !important; }
-  }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; scroll-behavior:auto !important; } }
 </style>
 
 <header class="top">
   <div class="wrap">
-    <div class="brand">里Trip<span class="dot">.</span><span class="coord mono">31.59°N&nbsp;130.55°E</span></div>
+    <div class="brand">Sato<span class="b">Trip</span></div>
     <nav>
-      <a href="#how">使い方</a>
-      <a href="#plan">プラン</a>
-      <a href="#spots">スポット</a>
+      <a href="#interests">趣味で探す</a>
+      <a href="#plans">プラン例</a>
+      <a href="#local">地元ならでは</a>
       <a href="#system">デザイン</a>
       <button class="toggle" id="themeToggle" aria-label="テーマ切り替え">◐</button>
     </nav>
@@ -220,100 +164,141 @@
 </header>
 
 <main>
-  <section class="hero wrap" style="padding-top:74px">
-    <div class="hero-grid">
+  <section class="hero wrap">
+    <span class="eyebrow">全国対応 · 趣味で探すAI旅程</span>
+    <h1 style="margin-top:16px">趣味の<span class="u">解像度</span>で、<br>日本を歩く。</h1>
+    <p class="lead">ツーリングも、カフェ巡りも、サウナも。SatoTrip は“何が好きか”から旅程を組み立て、ガイドブックに載らない地元の一軒までつなぎます。</p>
+    <div class="facet-row">
+      <button class="facet" style="--c:var(--c-touring)"><span class="ic">🏍️</span> ツーリング</button>
+      <button class="facet" style="--c:var(--c-cafe)"><span class="ic">☕</span> カフェ巡り</button>
+      <button class="facet" style="--c:var(--c-sauna)"><span class="ic">♨️</span> サウナ・温泉</button>
+      <button class="facet" style="--c:var(--c-photo)"><span class="ic">📷</span> 写真映え</button>
+      <button class="facet" style="--c:var(--c-history)"><span class="ic">⛩️</span> 歴史・史跡</button>
+      <button class="facet" style="--c:var(--c-nature)"><span class="ic">⛰️</span> 自然・絶景</button>
+    </div>
+    <div class="hero-cta">
+      <button class="btn btn-primary">趣味からプランを作る →</button>
+      <button class="btn btn-ghost">◍ 例を見る</button>
+    </div>
+  </section>
+
+  <section id="interests" class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow">趣味で探す / 8+ カテゴリ</span>
+      <h2>“定番”ではなく、“あなたの好き”で検索。</h2>
+      <p>選んだ趣味に合わせて、スポットも動線も並び替え。ニッチな組み合わせほど得意です。</p>
+    </div>
+    <div class="interests">
+      <div class="interest" style="--c:var(--c-touring)"><div class="ic">🏍️</div><h4>ツーリング</h4><p>絶景ロード・峠・道の駅をつなぐ</p><div class="n" style="margin-top:8px">1,240+ ルート</div></div>
+      <div class="interest" style="--c:var(--c-cafe)"><div class="ic">☕</div><h4>カフェ巡り</h4><p>路地の自家焙煎・純喫茶を歩いて</p><div class="n" style="margin-top:8px">3,010+ 軒</div></div>
+      <div class="interest" style="--c:var(--c-sauna)"><div class="ic">♨️</div><h4>サウナ・温泉</h4><p>ととのう地元湯・秘湯</p><div class="n" style="margin-top:8px">980+ 施設</div></div>
+      <div class="interest" style="--c:var(--c-photo)"><div class="ic">📷</div><h4>写真映え</h4><p>光の時間まで考えた撮影地</p><div class="n" style="margin-top:8px">2,400+ 地点</div></div>
+      <div class="interest" style="--c:var(--c-history)"><div class="ic">⛩️</div><h4>歴史・史跡</h4><p>城下町・古道・近代遺産</p><div class="n" style="margin-top:8px">1,760+ 地点</div></div>
+      <div class="interest" style="--c:var(--c-nature)"><div class="ic">⛰️</div><h4>自然・絶景</h4><p>棚田・岬・星空スポット</p><div class="n" style="margin-top:8px">1,510+ 地点</div></div>
+      <div class="interest" style="--c:var(--c-gourmet)"><div class="ic">🍜</div><h4>ご当地グルメ</h4><p>地元でしか食べられない一皿</p><div class="n" style="margin-top:8px">4,200+ 店</div></div>
+      <div class="interest" style="--c:var(--c-art)"><div class="ic">🎨</div><h4>アート・クラフト</h4><p>工房・現代美術・民藝</p><div class="n" style="margin-top:8px">720+ 地点</div></div>
+    </div>
+  </section>
+
+  <section id="plans" class="wrap">
+    <div class="sec-head">
+      <span class="eyebrow">プラン例 / 趣味 × 地域</span>
+      <h2>同じAIが、まるで違う旅を描く。</h2>
+      <p>選んだ趣味で、動線も滞在も“地元の声”も変わります。全国どこでも。</p>
+    </div>
+    <div class="examples">
+
+      <!-- 例1: カフェ巡り（東京・谷中）歩きのループ -->
+      <article class="plan" style="--c:var(--c-cafe)">
+        <div class="plan-h">
+          <div class="tag">☕</div>
+          <div><b>谷中〜千駄木 純喫茶の半日</b><span>半日 · 徒歩 · カフェ巡り</span></div>
+          <div class="region">東京 · YANAKA</div>
+        </div>
+        <div class="tl">
+          <div class="stop"><div class="t">10:30</div><div class="nd"><div class="row"><h5>喫茶 ネコマチ</h5></div><small>自家焙煎・朝の光が入る窓際</small></div></div>
+          <div class="leg">↳ 徒歩 7分 · 路地裏の階段坂</div>
+          <div class="stop"><div class="t">11:40</div><div class="nd"><div class="row"><h5>豆屋 谷中珈琲 <span class="badge-hole">穴場</span></h5></div><small>看板なし・常連の焙煎所</small></div></div>
+          <div class="leg">↳ 徒歩 5分</div>
+          <div class="stop"><div class="t">13:00</div><div class="nd"><div class="row"><h5>甘味と珈琲 みかど</h5></div><small>あんみつと深煎りのセット</small></div></div>
+        </div>
+        <div class="local">
+          <div class="lb">◆ 地元の声</div>
+          <q>ネコマチは11時前が狙い目。窓際の二席だけ光が入って、常連はみんなそこを取るんです。</q>
+          <cite>— 谷中在住・コーヒー焙煎 12年 / 佐藤さん</cite>
+        </div>
+      </article>
+
+      <!-- 例2: ツーリング（熊本・阿蘇）ルート -->
+      <article class="plan" style="--c:var(--c-touring)">
+        <div class="plan-h">
+          <div class="tag">🏍️</div>
+          <div><b>阿蘇 やまなみ稜線ツーリング</b><span>1日 · バイク · ツーリング</span></div>
+          <div class="region">熊本 · ASO</div>
+        </div>
+        <div class="tl">
+          <div class="stop"><div class="t">08:30</div><div class="nd"><div class="row"><h5>大観峰</h5></div><small>朝もやのカルデラを一望</small></div></div>
+          <div class="leg">↳ やまなみハイウェイ 42km · 稜線</div>
+          <div class="stop"><div class="t">10:40</div><div class="nd"><div class="row"><h5>道の駅 阿蘇望</h5></div><small>給油・地元ミルクのソフト</small></div></div>
+          <div class="leg">↳ 峠道 18km · 標高差 +520m</div>
+          <div class="stop"><div class="t">12:30</div><div class="nd"><div class="row"><h5>山あいの馬肉食堂 <span class="badge-hole">穴場</span></h5></div><small>ライダーだけが知る一軒</small></div></div>
+        </div>
+        <div class="local">
+          <div class="lb">◆ 地元の声</div>
+          <q>やまなみは午前の光がいちばん。昼を過ぎると霞むので、峠は早い時間に抜けるのが鉄則です。</q>
+          <cite>— 阿蘇のバイク乗り 20年 / 田口さん</cite>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <section id="local" class="wrap">
+    <div class="localfirst">
       <div>
-        <span class="eyebrow">AI 旅行プランナー / 地方観光</span>
-        <h1 style="margin-top:18px">行き先だけ決めて。<br>あとは AI が<span class="hl">1日の道筋</span>を描く。</h1>
-        <p class="lead">桜島も、黒豚も、白熊も。SatoTrip は地域の観光データから、移動時間まで織り込んだ“歩けるプラン”を数十秒で組み立てます。</p>
-        <div class="hero-cta">
-          <button class="btn btn-primary">プランを生成する →</button>
-          <button class="btn btn-ghost">◍ 鹿児島の例を見る</button>
-        </div>
-        <div class="hero-meta">
-          <div><b>47</b><span>都道府県対応</span></div>
-          <div><b>~30<span style="font-size:13px">秒</span></b><span>平均生成時間</span></div>
-          <div><b>6</b><span>スポット/日 最適化</span></div>
-        </div>
+        <span class="eyebrow">地元ならでは / インサイダー</span>
+        <h2 style="font-size:30px;margin-top:12px">ガイドブックの、その先へ。</h2>
+        <ul>
+          <li><span class="ic">◆</span> 地元の人・常連の“ひとこと”を各スポットに添える</li>
+          <li><span class="ic">◆</span> <span class="badge-hole" style="vertical-align:middle">穴場</span> 看板のない店・知る人ぞ知る道をタグで可視化</li>
+          <li><span class="ic">◆</span> 時間帯・季節・光まで織り込んだ“ちょうどいい”順路</li>
+        </ul>
       </div>
-
-      <!-- Hero thesis: a real generated itinerary -->
-      <div class="plan-card" aria-label="生成されたプランの例">
-        <div class="plan-head">
-          <div class="badge">桜</div>
-          <div class="t"><b>鹿児島 歴史とグルメの1日</b><span>1日間 · 電車 · ¥20,000</span></div>
-          <div class="live mono">GENERATED</div>
-        </div>
-        <div class="timeline">
-          <div class="stop">
-            <div class="time">09:00</div>
-            <div class="node"><div class="card2"><div class="thumb" style="background:var(--accent-soft)">⛩️</div><div><h4>仙巌園（磯庭園）</h4><p>桜島を借景にした薩摩の名園</p></div><div class="dur"><b>120分</b><span>滞在</span></div></div></div>
-          </div>
-          <div class="leg">↳ 市電 20分 · 磯 → 天文館</div>
-          <div class="stop food">
-            <div class="time">11:50</div>
-            <div class="node"><div class="card2"><div class="thumb" style="background:var(--accent-soft)">🍖</div><div><h4>黒豚料理 天文館</h4><p>名物・黒豚とんかつでランチ</p></div><div class="dur"><b>60分</b><span>滞在</span></div></div></div>
-          </div>
-          <div class="leg">↳ 徒歩 6分</div>
-          <div class="stop food">
-            <div class="time">13:00</div>
-            <div class="node"><div class="card2"><div class="thumb" style="background:var(--accent-soft)">🍧</div><div><h4>白熊 かき氷</h4><p>天文館名物のふわふわ氷</p></div><div class="dur"><b>45分</b><span>滞在</span></div></div></div>
-          </div>
-          <div class="leg">↳ 徒歩 12分</div>
-          <div class="stop">
-            <div class="time">14:10</div>
-            <div class="node"><div class="card2"><div class="thumb" style="background:color-mix(in srgb,var(--primary) 16%,transparent)">🌇</div><div><h4>城山展望台</h4><p>市街と桜島を一望する絶景</p></div><div class="dur"><b>60分</b><span>滞在</span></div></div></div>
-          </div>
-        </div>
+      <div class="lf-quote">
+        <q style="font-family:var(--font-mincho)">「観光地図には載っていない。でも、ここの人ならみんな知っている」——そういう情報こそ、旅をニッチにする。</q>
+        <cite>SatoTrip のデータ方針</cite>
       </div>
-    </div>
-  </section>
-
-  <section id="how" class="wrap">
-    <div class="sec-head">
-      <span class="eyebrow">使い方 / 3ステップ</span>
-      <h2>選ぶ、生成する、微調整する。</h2>
-      <p>操作はこれだけ。生成後もドラッグ＆ドロップで自由に組み替えられます。</p>
-    </div>
-    <div class="steps">
-      <div class="step"><div class="n">STEP 01</div><h3>目的地を選ぶ</h3><p>エリアと日数、テーマ（観光・グルメ・温泉…）を選ぶだけ。</p><span class="ic">🗾</span></div>
-      <div class="step"><div class="n">STEP 02</div><h3>AI が道筋を描く</h3><p>登録スポットと移動時間から、実際に歩ける行程を自動生成。</p><span class="ic">🧭</span></div>
-      <div class="step"><div class="n">STEP 03</div><h3>微調整して保存</h3><p>並び替え・宿の追加も自在。PDF や カレンダーに書き出し。</p><span class="ic">📌</span></div>
-    </div>
-  </section>
-
-  <section id="spots" class="wrap">
-    <div class="sec-head">
-      <span class="eyebrow">スポット / 鹿児島</span>
-      <h2>“行きたい”を、地図とタイムラインに。</h2>
-      <p>お気に入りに保存したスポットは、次のプラン生成にそのまま織り込まれます。</p>
-    </div>
-    <div class="gallery">
-      <div class="spot"><div class="ph" style="background:color-mix(in srgb,var(--primary) 12%,var(--surface))">🌋<span class="chip tag">絶景</span></div><div class="body"><h4>桜島</h4><div class="meta"><span class="star">★ 4.8</span> · 鹿児島市</div></div></div>
-      <div class="spot"><div class="ph" style="background:color-mix(in srgb,var(--moss) 16%,var(--surface))">🏯<span class="chip tag">歴史</span></div><div class="body"><h4>知覧武家屋敷庭園</h4><div class="meta"><span class="star">★ 4.7</span> · 南九州市</div></div></div>
-      <div class="spot"><div class="ph" style="background:color-mix(in srgb,var(--accent) 12%,var(--surface))">♨️<span class="chip tag">温泉</span></div><div class="body"><h4>指宿 砂むし温泉</h4><div class="meta"><span class="star">★ 4.6</span> · 指宿市</div></div></div>
-      <div class="spot"><div class="ph" style="background:color-mix(in srgb,var(--gold) 16%,var(--surface))">🌿<span class="chip tag">庭園</span></div><div class="body"><h4>仙巌園</h4><div class="meta"><span class="star">★ 4.8</span> · 鹿児島市</div></div></div>
     </div>
   </section>
 
   <section id="system" class="wrap">
     <div class="sec-head">
-      <span class="eyebrow">デザインシステム / 提案</span>
-      <h2>「みちしるべ」— 地図と時刻でできた旅の言語。</h2>
-      <p>火山と湾の色、データを語る等幅書体、余白の効いた行程表。旅の“道筋”そのものを UI の主役に据えます。</p>
+      <span class="eyebrow">デザインシステム / 提案 v2</span>
+      <h2>中立の基調 × 趣味のカテゴリカル配色。</h2>
+      <p>全国どこでも成立する静かなブランド基調の上に、趣味カテゴリごとの色で“意味＝色”を与えます。地元の声だけ明朝で人の声に。</p>
     </div>
     <div class="spec">
+      <div style="font-family:var(--font-mono);font-size:11px;color:var(--ink-soft);letter-spacing:.1em;margin-bottom:10px">趣味カテゴリ・パレット（検索の主役）</div>
       <div class="swatches">
-        <div class="sw"><div class="col" style="background:var(--primary)"></div><div class="lab"><b>Primary 湾の藍緑</b>#0E5C63</div></div>
-        <div class="sw"><div class="col" style="background:var(--accent)"></div><div class="lab"><b>Accent 桜島の残照</b>#D85F32</div></div>
-        <div class="sw"><div class="col" style="background:var(--moss)"></div><div class="lab"><b>Moss 苔・自然</b>#5F8767</div></div>
-        <div class="sw"><div class="col" style="background:var(--gold)"></div><div class="lab"><b>Brass 真鍮</b>#B0863A</div></div>
-        <div class="sw"><div class="col" style="background:var(--ground);border:1px solid var(--line)"></div><div class="lab"><b>Ground 錦江湾の紙</b>#E9EDE6</div></div>
+        <div class="sw"><div class="col" style="background:var(--c-touring)"></div><div class="lab"><b>ツーリング</b>#4E6E8E</div></div>
+        <div class="sw"><div class="col" style="background:var(--c-cafe)"></div><div class="lab"><b>カフェ巡り</b>#B5793C</div></div>
+        <div class="sw"><div class="col" style="background:var(--c-sauna)"></div><div class="lab"><b>サウナ/温泉</b>#2F8E8E</div></div>
+        <div class="sw"><div class="col" style="background:var(--c-photo)"></div><div class="lab"><b>写真映え</b>#C0567E</div></div>
+        <div class="sw"><div class="col" style="background:var(--c-history)"></div><div class="lab"><b>歴史</b>#9A7B3C</div></div>
+        <div class="sw"><div class="col" style="background:var(--c-nature)"></div><div class="lab"><b>自然</b>#5C8A5A</div></div>
+        <div class="sw"><div class="col" style="background:var(--c-gourmet)"></div><div class="lab"><b>グルメ</b>#C64B37</div></div>
+        <div class="sw"><div class="col" style="background:var(--c-art)"></div><div class="lab"><b>アート</b>#7A5AA6</div></div>
+      </div>
+      <div style="font-family:var(--font-mono);font-size:11px;color:var(--ink-soft);letter-spacing:.1em;margin:22px 0 10px">ブランド基調（中立・全国）</div>
+      <div class="swatches" style="grid-template-columns:repeat(4,1fr)">
+        <div class="sw"><div class="col" style="background:var(--brand)"></div><div class="lab"><b>藍 ブランド</b>#274690</div></div>
+        <div class="sw"><div class="col" style="background:var(--signal)"></div><div class="lab"><b>炭 CTA/インク</b>#21262A</div></div>
+        <div class="sw"><div class="col" style="background:var(--ground);border:1px solid var(--line)"></div><div class="lab"><b>紙 基調</b>#ECEDE8</div></div>
+        <div class="sw"><div class="col" style="background:var(--surface-2)"></div><div class="lab"><b>面 副</b>#F2F3EE</div></div>
       </div>
       <div class="type-rows">
-        <div class="type-row"><div class="k">DISPLAY / 見出し</div><div style="font-size:26px;font-weight:800;letter-spacing:-.03em">歩けるプランを、数十秒で。</div></div>
-        <div class="type-row"><div class="k">MONO / 時刻・座標</div><div class="mono" style="font-size:18px;color:var(--primary)">09:00 → 11:50 · 20 min · 31.59°N</div></div>
-        <div class="type-row"><div class="k">BODY / 本文</div><div style="color:var(--ink-soft)">移動時間まで織り込んだ、実際に歩ける行程。</div></div>
+        <div class="type-row"><div class="k">DISPLAY / 見出し</div><div style="font-size:24px;font-weight:800;letter-spacing:-.03em">趣味の解像度で、日本を歩く。</div></div>
+        <div class="type-row"><div class="k">MONO / データ</div><div class="mono" style="font-size:17px;color:var(--c-touring)">42km · +520m · 08:30 → 10:40</div></div>
+        <div class="type-row"><div class="k">MINCHO / 地元の声</div><div style="font-family:var(--font-mincho);font-size:16px">午前の光がいちばん。峠は早い時間に抜けるのが鉄則。</div></div>
       </div>
     </div>
   </section>
@@ -321,8 +306,8 @@
 
 <footer>
   <div class="wrap">
-    <div class="brand">里Trip<span class="dot" style="color:var(--accent)">.</span></div>
-    <span>UI リニューアル提案モックアップ · 「みちしるべ」ダイレクション</span>
+    <div class="brand">Sato<span class="b">Trip</span></div>
+    <span>UIリニューアル提案 v2 · 「趣味 × 地元インサイダー」ダイレクション</span>
     <span style="margin-left:auto" class="mono">© 2026 SatoTrip AI</span>
   </div>
 </footer>
@@ -330,15 +315,7 @@
 <script>
   (function () {
     var btn = document.getElementById('themeToggle');
-    function cur() {
-      var s = document.documentElement.getAttribute('data-theme');
-      if (s) return s;
-      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-    }
-    btn.addEventListener('click', function () {
-      var next = cur() === 'dark' ? 'light' : 'dark';
-      document.documentElement.setAttribute('data-theme', next);
-      btn.textContent = next === 'dark' ? '◑' : '◐';
-    });
+    function cur(){ var s=document.documentElement.getAttribute('data-theme'); if(s) return s; return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark':'light'; }
+    btn.addEventListener('click', function(){ var n = cur()==='dark'?'light':'dark'; document.documentElement.setAttribute('data-theme', n); btn.textContent = n==='dark'?'◑':'◐'; });
   })();
 </script>
