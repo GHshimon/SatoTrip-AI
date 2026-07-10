@@ -6,6 +6,7 @@
  */
 import React, { useState } from 'react';
 import TopoContour from '../components/design/TopoContour';
+import CategoryGlyph from '../components/design/CategoryGlyph';
 import RouteCrest from '../components/RouteCrest';
 import { BRAND_SEED } from '../src/design/crest';
 import { CATEGORY_TOKENS, HobbyCategory } from '../src/design/tokens';
@@ -193,16 +194,26 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate, isAuthenti
                     position: 'relative', textAlign: 'left', cursor: 'pointer',
                     border: '1px solid var(--st-line-strong)', borderRadius: 4,
                     background: 'var(--st-paper)', color: 'var(--st-ink)',
-                    padding: '20px 18px 16px 22px', minHeight: 120,
+                    padding: '20px 18px 16px 22px', minHeight: 132, overflow: 'hidden',
                     display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: 14,
                     transition: 'transform var(--st-dur-ui) var(--st-ease), box-shadow var(--st-dur-ui) var(--st-ease)',
                   }}
                 >
                   <span style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, background: cat.chip }} />
-                  <span style={{ fontSize: 10, letterSpacing: '0.22em', color: 'var(--st-ink-soft)' }}>
+                  {/* 背景の透かしグリフ：文字を読まずにカードを識別できる視覚記号。
+                      右側に寄せ、テキスト側には掛けないので可読性を損なわない */}
+                  <CategoryGlyph
+                    category={key}
+                    size={104}
+                    color={cat.chip}
+                    strokeWidth={2}
+                    className="st-catglyph"
+                    style={{ position: 'absolute', right: -10, bottom: -14, opacity: 0.16, pointerEvents: 'none', transition: 'opacity var(--st-dur-ui) var(--st-ease), transform var(--st-dur-ui) var(--st-ease)' }}
+                  />
+                  <span style={{ position: 'relative', fontSize: 10, letterSpacing: '0.22em', color: 'var(--st-ink-soft)' }}>
                     {cat.waName} ─ {key.toUpperCase()}
                   </span>
-                  <span>
+                  <span style={{ position: 'relative' }}>
                     <span style={{ display: 'block', fontFamily: 'var(--st-serif)', fontSize: 20, fontWeight: 600 }}>{cat.label}</span>
                     <span style={{ fontSize: 11, color: 'var(--st-ink-soft)' }}>{CATEGORY_NOTES[key]}</span>
                   </span>
@@ -255,6 +266,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate, isAuthenti
         .st-catcard:hover {
           transform: translateY(-3px);
           box-shadow: 0 20px 36px -26px rgba(0, 0, 0, 0.5);
+        }
+        .st-catcard:hover .st-catglyph {
+          opacity: 0.34 !important;
+          transform: scale(1.04);
         }
         @media (max-width: 900px) { .st-hide-mobile { display: none; } }
         @media (prefers-reduced-motion: reduce) {

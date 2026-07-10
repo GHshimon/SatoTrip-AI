@@ -9,6 +9,7 @@ import * as spotApi from '../src/api/spots';
 import { SpotAddModal } from '../components/SpotAddModal';
 import WeavingLoader from '../components/design/WeavingLoader';
 import RouteCrest from '../components/RouteCrest';
+import CategoryGlyph from '../components/design/CategoryGlyph';
 import { seedFromString, pointsFromCoords } from '../src/design/crest';
 import { CATEGORY_TOKENS, HobbyCategory } from '../src/design/tokens';
 import {
@@ -982,11 +983,12 @@ export const CreatePlan: React.FC<{ onNavigate: (path: string) => void }> = ({ o
                       key={key}
                       onClick={() => handleThemeToggle(cat.label)}
                       aria-pressed={selected}
-                      className="py-3 px-2 rounded-lg text-sm font-bold transition-all"
+                      className="py-3 px-2 rounded-lg text-sm font-bold transition-all flex flex-col items-center gap-1"
                       style={selected
                         ? { background: cat.chip, color: '#fff', border: `1px solid ${cat.chip}`, boxShadow: `0 6px 18px -8px ${cat.chip}` }
                         : { background: 'var(--st-paper)', color: cat.text, border: '1px solid var(--st-line-strong)' }}
                     >
+                      <CategoryGlyph category={key} size={26} strokeWidth={3} />
                       <span className="block text-[10px] tracking-widest opacity-70">{cat.waName}</span>
                       {cat.label}
                     </button>
