@@ -55,14 +55,25 @@ export const AdminDashboard: React.FC = () => {
       setIsLoading(true);
       setError(null);
       try {
-        const [statsData, alertsData, trendingData] = await Promise.all([
+        // allSettled にして、1つのAPIが失敗しても取得できた統計は表示する
+        const [statsRes, alertsRes, trendingRes] = await Promise.allSettled([
           getAdminStats(),
           getSystemAlerts(),
           getTrendingAreas(3)
         ]);
-        setStats(statsData);
-        setAlerts(alertsData);
-        setTrendingAreas(trendingData);
+        if (statsRes.status === 'fulfilled') setStats(statsRes.value);
+        if (alertsRes.status === 'fulfilled') setAlerts(alertsRes.value);
+        if (trendingRes.status === 'fulfilled') setTrendingAreas(trendingRes.value);
+
+        const failedCount = [statsRes, alertsRes, trendingRes].filter(r => r.status === 'rejected').length;
+        if (failedCount === 3) {
+          // すべて失敗したときのみ全画面エラーにする
+          const firstErr: any = (statsRes as PromiseRejectedResult).reason;
+          setError(firstErr?.detail || firstErr?.message || 'ダッシュボードデータの取得に失敗しました');
+        } else if (failedCount > 0) {
+          // 一部失敗は非ブロッキングで通知し、取得できた分は表示する
+          showError('一部のデータの取得に失敗しました');
+        }
       } catch (err: any) {
         console.error('Failed to fetch dashboard data:', err);
         setError(err.detail || err.message || 'ダッシュボードデータの取得に失敗しました');
