@@ -187,7 +187,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate, isAuthenti
               return (
                 <button
                   key={key}
-                  onClick={() => onNavigate('/create')}
+                  onClick={() => onNavigate(`/create?hobby=${key}`)}
                   className="st-catcard"
                   style={{
                     position: 'relative', textAlign: 'left', cursor: 'pointer',

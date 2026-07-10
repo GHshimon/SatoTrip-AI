@@ -38,42 +38,45 @@ const AppContent: React.FC = () => {
   };
 
   const renderPage = () => {
+    // クエリ(?hobby=... 等)はルート一致判定から除外する
+    const path = route.split('?')[0];
+
     // Admin Routes - Protect
-    if (route.startsWith('/admin')) {
+    if (path.startsWith('/admin')) {
       if (!isAuthenticated || user?.role !== 'admin') {
          // Redirect to login if not authenticated or not admin
          return <Layout onNavigate={navigate} currentPath={route} isAuthenticated={isAuthenticated} onLogout={onLogout}><LoginPage onLogin={handleLogin} /></Layout>;
       }
       
-      if (route === '/admin/users') return <AdminUsers />;
-      if (route === '/admin/spots') return <AdminSpots />;
-      if (route === '/admin/tags') return <AdminTags />;
-      if (route === '/admin/settings') return <AdminAiSettings />;
+      if (path === '/admin/users') return <AdminUsers />;
+      if (path === '/admin/spots') return <AdminSpots />;
+      if (path === '/admin/tags') return <AdminTags />;
+      if (path === '/admin/settings') return <AdminAiSettings />;
       return <AdminDashboard />;
     }
     
     // Auth Routes
-    if (route === '/login') return <Layout onNavigate={navigate} currentPath={route} isAuthenticated={isAuthenticated} onLogout={onLogout}><LoginPage onLogin={handleLogin} /></Layout>;
+    if (path === '/login') return <Layout onNavigate={navigate} currentPath={route} isAuthenticated={isAuthenticated} onLogout={onLogout}><LoginPage onLogin={handleLogin} /></Layout>;
 
     // 新デザインのランディング（自前ヘッダを持つため Layout 外・DESIGN_PROPOSAL §8-3）
-    if (route === '/') return <LandingPage onNavigate={navigate} isAuthenticated={isAuthenticated} />;
+    if (path === '/') return <LandingPage onNavigate={navigate} isAuthenticated={isAuthenticated} />;
     // デザインシステムのレビュー用ショーケース（開発者向け）
-    if (route === '/design-preview') return <DesignPreview />;
+    if (path === '/design-preview') return <DesignPreview />;
 
     // Static Layout Routes
-    if (route === '/home') return <Layout onNavigate={navigate} currentPath={route} isAuthenticated={isAuthenticated} onLogout={onLogout}><Home onNavigate={navigate} /></Layout>;
-    if (route === '/plans') return <Layout onNavigate={navigate} currentPath={route} isAuthenticated={isAuthenticated} onLogout={onLogout}><PlanList onNavigate={navigate} /></Layout>;
-    if (route === '/myspots') return <Layout onNavigate={navigate} currentPath={route} isAuthenticated={isAuthenticated} onLogout={onLogout}><MySpots onNavigate={navigate} /></Layout>;
-    if (route === '/favorites') return <Layout onNavigate={navigate} currentPath={route} isAuthenticated={isAuthenticated} onLogout={onLogout}><FavoriteSpots onNavigate={navigate} /></Layout>;
-    if (route === '/profile') return <Layout onNavigate={navigate} currentPath={route} isAuthenticated={isAuthenticated} onLogout={onLogout}><UserProfile /></Layout>;
-    if (route === '/settings') return <Layout onNavigate={navigate} currentPath={route} isAuthenticated={isAuthenticated} onLogout={onLogout}><Settings /></Layout>;
+    if (path === '/home') return <Layout onNavigate={navigate} currentPath={route} isAuthenticated={isAuthenticated} onLogout={onLogout}><Home onNavigate={navigate} /></Layout>;
+    if (path === '/plans') return <Layout onNavigate={navigate} currentPath={route} isAuthenticated={isAuthenticated} onLogout={onLogout}><PlanList onNavigate={navigate} /></Layout>;
+    if (path === '/myspots') return <Layout onNavigate={navigate} currentPath={route} isAuthenticated={isAuthenticated} onLogout={onLogout}><MySpots onNavigate={navigate} /></Layout>;
+    if (path === '/favorites') return <Layout onNavigate={navigate} currentPath={route} isAuthenticated={isAuthenticated} onLogout={onLogout}><FavoriteSpots onNavigate={navigate} /></Layout>;
+    if (path === '/profile') return <Layout onNavigate={navigate} currentPath={route} isAuthenticated={isAuthenticated} onLogout={onLogout}><UserProfile /></Layout>;
+    if (path === '/settings') return <Layout onNavigate={navigate} currentPath={route} isAuthenticated={isAuthenticated} onLogout={onLogout}><Settings /></Layout>;
     
     // Route to Plan Creator
-    if (route === '/create') return <Layout onNavigate={navigate} currentPath={route} isAuthenticated={isAuthenticated} onLogout={onLogout}><CreatePlan onNavigate={navigate} /></Layout>;
+    if (path === '/create') return <Layout onNavigate={navigate} currentPath={route} isAuthenticated={isAuthenticated} onLogout={onLogout}><CreatePlan onNavigate={navigate} /></Layout>;
     
     // Dynamic Routes (Matching logic)
-    if (route.startsWith('/plan/')) {
-      const parts = route.split('/');
+    if (path.startsWith('/plan/')) {
+      const parts = path.split('/');
       const planId = parts[2];
       const isEdit = parts[3] === 'edit';
       // PlanDetailとPlanEditorコンポーネント内でAPIから取得するように変更
@@ -84,12 +87,12 @@ const AppContent: React.FC = () => {
       }
     }
 
-    if (route.startsWith('/prefecture/')) {
-      const area = decodeURIComponent(route.split('/')[2]);
+    if (path.startsWith('/prefecture/')) {
+      const area = decodeURIComponent(path.split('/')[2]);
       return <Layout onNavigate={navigate} currentPath={route} isAuthenticated={isAuthenticated} onLogout={onLogout}><PrefectureSpots area={area} onNavigate={navigate} /></Layout>;
     }
 
-    if (route.startsWith('/hotels/')) {
+    if (path.startsWith('/hotels/')) {
       // For demo, ignore area param and show list
       return <Layout onNavigate={navigate} currentPath={route} isAuthenticated={isAuthenticated} onLogout={onLogout}><HotelList onNavigate={navigate} /></Layout>;
     }
