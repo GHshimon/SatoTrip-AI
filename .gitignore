@@ -1,0 +1,27 @@
+# 環境変数・シークレット（テンプレートの *.example のみ追跡する）
+.env
+.env.*
+!.env.example
+!.env.*.example
+login.json
+
+# 依存関係・ビルド成果物
+node_modules/
+dist/
+build/
+
+# ログ・デバッグ出力
+*.log
+logs/
+.cursor/debug.log
+# エージェントデバッグコードが誤って生成するWindowsパスのゴミファイル
+c:\projects\*
+
+# データベース・ローカルデータ
+*.db
+*.sqlite3
+data/login_attempts.json
+
+# OS / エディタ
+.DS_Store
+Thumbs.db
