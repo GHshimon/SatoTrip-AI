@@ -4,6 +4,7 @@ import { useAuth } from '../src/hooks/useAuth';
 import { useToast } from '../components/Toast';
 import * as userApi from '../src/api/users';
 import * as authApi from '../src/api/auth';
+import * as paymentApi from '../src/api/payments';
 import { getErrorMessage } from '../src/utils/errorHandler';
 
 export const Home: React.FC<{ onNavigate: (path: string) => void }> = ({ onNavigate }) => {
@@ -571,6 +572,30 @@ export const Settings: React.FC = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isChangingPassword, setIsChangingPassword] = useState(false);
 
+  // 決済（Stripe）
+  const [paymentConfigured, setPaymentConfigured] = useState(false);
+  const [checkoutPlan, setCheckoutPlan] = useState<string | null>(null);
+
+  useEffect(() => {
+    // 決済が有効かどうかを取得（未設定なら「準備中」表示のまま）
+    paymentApi.getPaymentConfig()
+      .then((cfg) => setPaymentConfigured(cfg.configured))
+      .catch(() => setPaymentConfigured(false));
+  }, []);
+
+  const handleUpgrade = async (planName: string) => {
+    if (checkoutPlan) return;
+    setCheckoutPlan(planName);
+    try {
+      const session = await paymentApi.createCheckout(planName);
+      // StripeのCheckoutページへ遷移
+      window.location.href = session.url;
+    } catch (err) {
+      showError(getErrorMessage(err) || '決済ページの作成に失敗しました');
+      setCheckoutPlan(null);
+    }
+  };
+
   useEffect(() => {
     const fetchPreferences = async () => {
       try {
@@ -802,22 +827,46 @@ export const Settings: React.FC = () => {
         </form>
       </div>
 
-      {/* お支払い方法（Stripe 未実装のため準備中） */}
+      {/* お支払い・プランのアップグレード（Stripe） */}
       <div className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100 mb-6">
-        <button
-          type="button"
-          onClick={() => showInfo('お支払い機能は現在準備中です')}
-          className="w-full p-6 hover:bg-gray-50 transition-colors flex items-center gap-4 group text-left"
-        >
-          <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-text-muted group-hover:bg-primary/10 group-hover:text-primary transition-colors">
+        <div className="p-6 flex items-center gap-4 border-b border-gray-100">
+          <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-text-muted">
             <span className="material-symbols-outlined">credit_card</span>
           </div>
           <div className="flex-1">
-            <h3 className="font-bold text-text-light">お支払い方法</h3>
-            <p className="text-sm text-text-muted">クレジットカードの管理</p>
+            <h3 className="font-bold text-text-light">プランのアップグレード</h3>
+            <p className="text-sm text-text-muted">より多くのプラン生成・機能を利用できます</p>
           </div>
-          <span className="text-xs bg-gray-100 text-text-muted px-2 py-1 rounded-full font-bold">準備中</span>
-        </button>
+          {!paymentConfigured && (
+            <span className="text-xs bg-gray-100 text-text-muted px-2 py-1 rounded-full font-bold">準備中</span>
+          )}
+        </div>
+        {paymentConfigured ? (
+          <div className="p-6 grid gap-3 sm:grid-cols-2">
+            {[
+              { plan: 'basic', name: 'ベーシック', price: '¥980/月', desc: '月50プラン・広告なし・PDF出力' },
+              { plan: 'premium', name: 'プレミアム', price: '¥2,980/月', desc: '無制限・優先サポート・高度な最適化' },
+            ].map((p) => (
+              <div key={p.plan} className="border border-gray-200 rounded-xl p-4 flex flex-col">
+                <div className="font-bold text-text-light">{p.name}</div>
+                <div className="text-primary font-black text-lg">{p.price}</div>
+                <p className="text-xs text-text-muted flex-1 mt-1">{p.desc}</p>
+                <button
+                  type="button"
+                  onClick={() => handleUpgrade(p.plan)}
+                  disabled={checkoutPlan !== null}
+                  className="mt-3 bg-primary text-white py-2 rounded-full font-bold text-sm hover:opacity-90 transition-opacity disabled:opacity-50"
+                >
+                  {checkoutPlan === p.plan ? '処理中...' : 'アップグレード'}
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="p-6 text-sm text-text-muted">
+            オンライン決済は現在準備中です。ご利用可能になり次第、こちらからお申し込みいただけます。
+          </div>
+        )}
       </div>
 
       {/* ヘルプとサポート（お問い合わせページへ遷移） */}
