@@ -27,6 +27,7 @@ from app.utils.plan_cache import get_cached_plan, save_cached_plan
 from app.utils.subscription import can_generate_plan, record_plan_generation, get_user_plan, check_feature_access
 from app.utils.rate_limiter import rate_limiter
 from app.utils.plan_export import export_to_pdf, export_to_ical
+import asyncio
 import uuid
 from datetime import datetime
 from app.utils.geocoding import get_coordinates
@@ -519,9 +520,9 @@ async def generate_ai_plan(
                 route_requests.append(([(lat1, lng1), (lat2, lng2)], profile))
                 route_request_indices.append(i)
             
-            # バッチ処理でルート情報を取得
+            # バッチ処理でルート情報を取得（同期HTTPのためスレッドへ逃がす）
             if route_requests:
-                route_results = get_route_info_batch(route_requests, max_workers=10)
+                route_results = await asyncio.to_thread(get_route_info_batch, route_requests, max_workers=10)
                 
                 # 結果を適用
                 for idx, route_result in enumerate(route_results):
@@ -646,7 +647,11 @@ async def generate_ai_plan(
             else:
                 themes_list.append(str(theme))
     
-    generated_plan = generate_plan(
+    # Gemini呼び出しは同期ブロッキング（数十秒）のため、必ずワーカースレッドへ逃がす。
+    # イベントループ上で直接呼ぶと /health が応答できず、Render等のヘルスチェックが
+    # インスタンスを強制再起動して生成リクエストが502になる。
+    generated_plan = await asyncio.to_thread(
+        generate_plan,
         destination=request.destination,
         days=request.days,
         budget=request.budget,
@@ -801,9 +806,9 @@ async def generate_ai_plan(
             route_requests.append(([(lat1, lng1), (lat2, lng2)], profile))
             route_request_indices.append(i)
         
-        # バッチ処理でルート情報を取得
+        # バッチ処理でルート情報を取得（同期HTTPのためスレッドへ逃がす）
         if route_requests:
-            route_results = get_route_info_batch(route_requests, max_workers=10)
+            route_results = await asyncio.to_thread(get_route_info_batch, route_requests, max_workers=10)
             
             # 結果を適用
             for idx, route_result in enumerate(route_results):
