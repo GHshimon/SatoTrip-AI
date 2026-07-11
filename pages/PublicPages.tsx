@@ -96,6 +96,7 @@ export const LoginPage: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [isRegistering, setIsRegistering] = useState(false);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
@@ -302,9 +303,26 @@ export const LoginPage: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
             </div>
           )}
 
+          {/* 規約同意の取得（商用監査 1-2 対応）。登録時のみ必須 */}
+          {isRegistering && (
+            <label className="flex items-start gap-2 cursor-pointer text-sm mt-2">
+              <input
+                type="checkbox"
+                className="accent-primary mt-1"
+                checked={agreedToTerms}
+                onChange={(e) => setAgreedToTerms(e.target.checked)}
+              />
+              <span className="text-text-muted">
+                <a href="#/terms" target="_blank" className="text-primary underline">利用規約</a>と
+                <a href="#/privacy" target="_blank" className="text-primary underline">プライバシーポリシー</a>
+                に同意します
+              </span>
+            </label>
+          )}
+
           <button
             type="submit"
-            disabled={isLoading}
+            disabled={isLoading || (isRegistering && !agreedToTerms)}
             className="w-full bg-primary text-white py-4 rounded-xl font-bold text-lg shadow-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 mt-4"
           >
             {isLoading ? '処理中...' : (isRegistering ? '登録' : 'ログイン')}

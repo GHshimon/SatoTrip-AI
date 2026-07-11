@@ -23,8 +23,10 @@ Text Search で店舗候補を絞り、Place Details で住所・緯度経度・
 """
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+import re
+from typing import Any, Dict, List, Optional, Tuple
 from difflib import SequenceMatcher
+from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 
 import requests
 
@@ -35,6 +37,19 @@ from app.utils.error_handler import log_error
 PLACES_TEXT_SEARCH_URL = "https://places.googleapis.com/v1/places:searchText"
 PLACES_DETAILS_URL = "https://places.googleapis.com/v1/places/{place_id}"
 PLACE_PHOTO_URL = "https://places.googleapis.com/v1/{photo_name}/media"
+
+# 写真配信用の自前プロキシ（APIキーをクライアントへ露出させないため、
+# DB・レスポンスにはこのプロキシURLだけを載せる）
+PHOTO_PROXY_PATH = "/api/spots/photo"
+
+# Places の photo resource name 形式（places/<place_id>/photos/<token>）
+# プロキシ経由の外部リクエスト先を Places Photo API に限定する（SSRF対策）
+_PHOTO_RESOURCE_NAME_RE = re.compile(r"^places/[A-Za-z0-9_-]+/photos/[A-Za-z0-9_-]+$")
+
+# 旧形式（APIキー入り）で DB に保存された画像URLの照合用
+_LEGACY_PHOTO_URL_RE = re.compile(
+    r"^https://places\.googleapis\.com/v1/(places/[^/?#]+/photos/[^/?#]+)/media"
+)
 
 _TEXT_SEARCH_FIELD_MASK = ",".join([
     "places.id",
@@ -401,27 +416,89 @@ def get_place_details(place_id: str) -> Optional[Dict[str, Any]]:
         return None
 
 
-def build_photo_url(photo_resource_name: str, max_width_px: Optional[int] = None) -> Optional[str]:
+def is_valid_photo_resource_name(photo_resource_name: str) -> bool:
+    """Places の photo resource name 形式（places/<id>/photos/<token>）か検証する"""
+    if not photo_resource_name or not isinstance(photo_resource_name, str):
+        return False
+    return bool(_PHOTO_RESOURCE_NAME_RE.match(photo_resource_name))
+
+
+def build_photo_proxy_url(photo_resource_name: str) -> Optional[str]:
     """
-    Places の photo resource name から表示用 URL を組み立てる
-    （API キーをクエリに含める形式）
+    Places の photo resource name から自前プロキシ経由の画像 URL を組み立てる
+    （API キーを含まない。実際の取得は ``GET /api/spots/photo`` がサーバ側で行う）
+
+    Args:
+        photo_resource_name: ``places/<id>/photos/<token>``
+
+    Returns:
+        ``/api/spots/photo?ref=...`` 形式の URL
+    """
+    if not photo_resource_name:
+        return None
+    return f"{PHOTO_PROXY_PATH}?ref={quote(photo_resource_name, safe='')}"
+
+
+def to_public_image_url(image_url: Optional[str]) -> Optional[str]:
+    """
+    レスポンス返却用の画像 URL 変換ヘルパー（後方互換）
+
+    旧実装では ``https://places.googleapis.com/v1/.../media?...&key=<APIキー>`` を
+    そのまま DB に保存していたため、返却時に検出してプロキシ URL に変換する。
+    photo resource name を取り出せない場合も key パラメータだけは必ず除去する。
+    それ以外の URL（placehold.co 等）はそのまま返す。
+    """
+    if not image_url or not isinstance(image_url, str):
+        return image_url
+    if "places.googleapis.com" not in image_url or "key=" not in image_url:
+        return image_url
+
+    m = _LEGACY_PHOTO_URL_RE.match(image_url)
+    if m and is_valid_photo_resource_name(m.group(1)):
+        return build_photo_proxy_url(m.group(1))
+
+    # 想定外の形式でも API キーの露出だけは防ぐ
+    parts = urlsplit(image_url)
+    query = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True) if k != "key"]
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
+
+
+def fetch_photo_media(
+    photo_resource_name: str,
+    max_width_px: Optional[int] = None,
+) -> Optional[Tuple[bytes, str]]:
+    """
+    Places Photo API から画像バイトを取得する（プロキシ配信用・API キーはサーバ側でのみ付与）
 
     Args:
         photo_resource_name: ``places/<id>/photos/<token>``
         max_width_px: 最大幅
 
     Returns:
-        画像 URL
+        ``(画像バイト, Content-Type)``、失敗時は None
     """
     api_key = _api_key_or_none()
-    if api_key is None or not photo_resource_name:
+    if api_key is None or not is_valid_photo_resource_name(photo_resource_name):
         return None
 
     width = max_width_px or settings.PLACES_PHOTO_MAX_WIDTH_PX
-    return (
-        f"{PLACE_PHOTO_URL.format(photo_name=photo_resource_name)}"
-        f"?maxWidthPx={int(width)}&key={api_key}"
-    )
+    url = PLACE_PHOTO_URL.format(photo_name=photo_resource_name)
+    try:
+        res = requests.get(
+            url,
+            params={"maxWidthPx": int(width), "key": api_key},
+            timeout=settings.PLACES_API_TIMEOUT_SEC,
+        )
+        res.raise_for_status()
+        content_type = res.headers.get("Content-Type") or "image/jpeg"
+        return res.content, content_type
+    except Exception as e:
+        log_error(
+            "PLACES_PHOTO_FETCH_ERROR",
+            f"Places 写真取得失敗: {e}",
+            {"photo_resource_name": photo_resource_name},
+        )
+        return None
 
 
 def enrich_spot_with_places(
@@ -446,7 +523,7 @@ def enrich_spot_with_places(
             "website": str | None,
             "rating": float | None,
             "price": float | None,             # 円換算
-            "image": str | None,
+            "image": str | None,               # /api/spots/photo?ref=... 形式（キー無し）
             "types": list[str],
         }``
         ヒットなしや API キー未設定時は ``None``。
@@ -525,7 +602,8 @@ def enrich_spot_with_places(
     if photos:
         first_photo_name = photos[0].get("name")
         if first_photo_name:
-            image_url = build_photo_url(first_photo_name)
+            # API キーを含まないプロキシ URL を保存する（漏洩防止）
+            image_url = build_photo_proxy_url(first_photo_name)
 
     return {
         "place_id": place_id,

@@ -71,7 +71,25 @@ class PlanResponse(PlanBase):
     created_at: datetime
     updated_at: Optional[datetime] = None
     excluded_spots: Optional[List[Dict[str, Any]]] = None  # 除外されたスポット情報（プラン生成時のみ）
-    
+
+    @field_validator('spots', 'thumbnail', mode='before')
+    @classmethod
+    def sanitize_places_image_urls(cls, v):
+        """既存プランのJSONに焼き込まれた「APIキー入り Places 写真URL」を応答時に無害化する。
+
+        スポットの image / プランの thumbnail が対象。DBマイグレーション不要で
+        過去に生成済みのプランもキー無しのプロキシURLで配信される。
+        """
+        from app.services.places_service import to_public_image_url
+        if isinstance(v, str):
+            return to_public_image_url(v)
+        if isinstance(v, list):
+            for ps in v:
+                spot = ps.get('spot') if isinstance(ps, dict) else None
+                if isinstance(spot, dict) and isinstance(spot.get('image'), str):
+                    spot['image'] = to_public_image_url(spot['image'])
+        return v
+
     class Config:
         from_attributes = True
 
@@ -94,6 +112,8 @@ class PlanGenerateRequest(BaseModel):
     check_in_date: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
     check_out_date: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
     num_guests: Optional[int] = Field(default=None, ge=1, le=20)
+    # 宿泊を自分で手配するユーザー向け: False でプランへのホテル追加をスキップ
+    include_hotels: Optional[bool] = True
     
     @field_validator('days')
     @classmethod

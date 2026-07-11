@@ -11,6 +11,7 @@ from app.models.api_key import ApiKey
 from app.schemas.plan import PlanGenerateRequest, PlanResponse
 from app.services.plan_service import create_plan
 from app.services.gemini_service import generate_plan
+from app.services.places_service import to_public_image_url
 from app.services.spot_service import get_spots_for_plan
 from app.utils.plan_cache import get_cached_plan, save_cached_plan
 from app.utils.rate_limiter import rate_limiter
@@ -293,7 +294,7 @@ async def generate_ai_plan_for_agent(
             "category": spot.category or "Culture",
             "durationMinutes": spot.duration_minutes or 60,
             "rating": spot.rating or 4.0,
-            "image": spot.image or "",
+            "image": to_public_image_url(spot.image) or "",
             "tags": spot.tags or [],
             "location": {
                 "lat": spot.latitude or 0.0,

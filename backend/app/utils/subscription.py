@@ -119,27 +119,83 @@ def record_plan_generation(db: Session, user_id: str):
     db.commit()
 
 
-def upgrade_plan(db: Session, user_id: str, plan_name: str, months: int = 1):
-    """プランをアップグレード"""
+def upgrade_plan(
+    db: Session,
+    user_id: str,
+    plan_name: str,
+    months: int = 1,
+    stripe_customer_id: Optional[str] = None,
+    stripe_subscription_id: Optional[str] = None,
+):
+    """プランをアップグレード（Stripe の突合用IDも任意で保存する）"""
     expires_at = datetime.now() + timedelta(days=30 * months)
-    
+
     subscription = db.query(Subscription).filter(
         Subscription.user_id == user_id
     ).first()
-    
+
     if subscription:
         subscription.plan_name = plan_name
         subscription.upgraded_at = datetime.now()
         subscription.expires_at = expires_at
         subscription.updated_at = datetime.now()
+        if stripe_customer_id:
+            subscription.stripe_customer_id = stripe_customer_id
+        if stripe_subscription_id:
+            subscription.stripe_subscription_id = stripe_subscription_id
     else:
         subscription = Subscription(
             user_id=user_id,
             plan_name=plan_name,
-            expires_at=expires_at
+            expires_at=expires_at,
+            stripe_customer_id=stripe_customer_id,
+            stripe_subscription_id=stripe_subscription_id,
         )
         db.add(subscription)
-    
+
+    db.commit()
+
+
+def get_subscription_by_stripe_ids(
+    db: Session,
+    stripe_subscription_id: Optional[str] = None,
+    stripe_customer_id: Optional[str] = None,
+) -> Optional[Subscription]:
+    """Stripe の subscription_id（優先）/ customer_id からサブスクリプションを特定"""
+    if stripe_subscription_id:
+        subscription = db.query(Subscription).filter(
+            Subscription.stripe_subscription_id == stripe_subscription_id
+        ).first()
+        if subscription:
+            return subscription
+    if stripe_customer_id:
+        return db.query(Subscription).filter(
+            Subscription.stripe_customer_id == stripe_customer_id
+        ).first()
+    return None
+
+
+def extend_subscription(db: Session, subscription: Subscription, expires_at: datetime):
+    """継続課金の入金を受けて有効期限を延長する（プラン名は維持）"""
+    # 期限を過去方向へ短縮しない（イベントの順不同・再送に対する安全策）
+    if not subscription.expires_at or expires_at > subscription.expires_at:
+        subscription.expires_at = expires_at
+        subscription.updated_at = datetime.now()
+    # 呼び出し元での付随変更（stripe_subscription_id の補完等）も含めて確定する
+    db.commit()
+
+
+def downgrade_to_free(db: Session, user_id: str):
+    """プランを free に降格する（解約・支払失敗時）"""
+    subscription = db.query(Subscription).filter(
+        Subscription.user_id == user_id
+    ).first()
+    if not subscription:
+        return
+    subscription.plan_name = "free"
+    subscription.expires_at = None
+    subscription.stripe_subscription_id = None
+    subscription.updated_at = datetime.now()
     db.commit()
 
 

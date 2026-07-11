@@ -346,8 +346,10 @@ const LeafletMap: React.FC<{
   selectedDay: number,
   planId?: string,
   visibleDays?: Set<number>,
+  /** 移動手段の切替をルート取得に反映する（public/car/walk） */
+  transportOverride?: string,
   onRouteInfoUpdate?: (day: number, info: { distance: number; duration: number; transportation?: string; spotDurations?: Array<{ spotId: string; duration: number }> }) => void
-}> = ({ planSpots, areaName, selectedDay, planId, visibleDays, onRouteInfoUpdate }) => {
+}> = ({ planSpots, areaName, selectedDay, planId, visibleDays, transportOverride, onRouteInfoUpdate }) => {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
   const layerGroupRef = useRef<any>(null);
@@ -411,13 +413,23 @@ const LeafletMap: React.FC<{
         const opacity = isSelectedDay ? 1.0 : 0.5;
         const zIndexOffset = isSelectedDay ? 1000 : 0;
 
-        const icon = new L.Icon({
-          iconUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,
-          shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-          iconSize: [25, 41],
-          iconAnchor: [12, 41],
-          popupAnchor: [1, -34],
-          shadowSize: [41, 41]
+        // 訪問順の番号入りマーカー（タイムラインと地図を対応付ける）
+        // 外部画像ホットリンク(raw.githubusercontent)への依存も解消
+        const orderInDay = (spotsByDay[ps.day] || []).indexOf(ps) + 1;
+        const colorHex: Record<string, string> = {
+          red: '#B5493A', blue: '#2166A6', green: '#4F7C3A', orange: '#C69211',
+          violet: '#6A4F9E', gold: '#A86A1F', grey: '#5B6469', black: '#1C1F26'
+        };
+        const bg = colorHex[color] || '#2166A6';
+        const icon = L.divIcon({
+          className: '',
+          html: `<div style="width:30px;height:30px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);` +
+            `background:${bg};border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.4);` +
+            `display:flex;align-items:center;justify-content:center;">` +
+            `<span style="transform:rotate(45deg);color:#fff;font-weight:700;font-size:13px;font-family:sans-serif;">${orderInDay}</span></div>`,
+          iconSize: [30, 30],
+          iconAnchor: [15, 28],
+          popupAnchor: [0, -26]
         });
 
         const marker = L.marker([ps.spot.location.lat, ps.spot.location.lng], {
@@ -476,7 +488,12 @@ const LeafletMap: React.FC<{
           // バックエンドAPIを使用（planIdが利用可能な場合）
           if (planId) {
             try {
-              const routeResponse = await planApi.getPlanRoute(planId, day);
+              const routeResponse = await planApi.getPlanRoute(
+                planId,
+                day,
+                // 選択中の日の移動手段切替をルート計算に反映
+                day === selectedDay ? transportOverride : undefined,
+              );
               if (routeResponse && routeResponse.route) {
                 const route = routeResponse.route;
                 if (route.geometry && route.geometry.length > 0) {
@@ -664,7 +681,7 @@ const LeafletMap: React.FC<{
     return () => {
       isMounted = false;
     };
-  }, [planSpots, selectedDay, areaName, visibleDays]);
+  }, [planSpots, selectedDay, areaName, visibleDays, transportOverride]);
 
   return <div ref={mapRef} className="w-full h-full rounded-2xl min-h-[400px] z-0" />;
 };
@@ -797,6 +814,7 @@ export const CreatePlan: React.FC<{ onNavigate: (path: string) => void }> = ({ o
         check_in_date: request.checkInDate,
         check_out_date: request.checkOutDate,
         num_guests: request.numGuests,
+        include_hotels: request.includeHotels ?? true,
       });
 
       // 除外されたスポットがある場合、ユーザーに通知
@@ -1016,6 +1034,26 @@ export const CreatePlan: React.FC<{ onNavigate: (path: string) => void }> = ({ o
                   <span className="material-symbols-outlined text-primary">hotel</span>
                   宿泊情報（オプション）
                 </h3>
+                {/* 宿泊は自分で確保する人向けのスキップ選択（重複提案の抑止） */}
+                <div className="flex gap-3 mb-4">
+                  {[
+                    { v: true, label: '宿泊先も提案してほしい' },
+                    { v: false, label: '宿泊は自分で手配する（提案不要）' },
+                  ].map(opt => (
+                    <button
+                      key={String(opt.v)}
+                      onClick={() => setRequest({ ...request, includeHotels: opt.v })}
+                      aria-pressed={(request.includeHotels ?? true) === opt.v}
+                      className="px-4 py-2 rounded-full text-sm font-bold transition-all"
+                      style={(request.includeHotels ?? true) === opt.v
+                        ? { background: 'var(--st-ai, #2A4B7C)', color: '#fff', border: '1px solid var(--st-ai, #2A4B7C)' }
+                        : { background: 'var(--st-paper, #fff)', color: 'var(--st-ink-soft, #718096)', border: '1px solid var(--st-line-strong, #C3BBA9)' }}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                {(request.includeHotels ?? true) && (
                 <div className="space-y-4 bg-gray-50 p-4 rounded-xl">
                   <div className="grid grid-cols-2 gap-4">
                     <div>
@@ -1058,6 +1096,7 @@ export const CreatePlan: React.FC<{ onNavigate: (path: string) => void }> = ({ o
                     </div>
                   </div>
                 </div>
+                )}
               </div>
 
 
@@ -1711,6 +1750,10 @@ export const PlanDetail: React.FC<{ planId: string; onNavigate: (path: string) =
               <div>
                 <h1 className="text-4xl lg:text-5xl mb-1 tracking-tight" style={{ fontFamily: 'var(--st-serif)', fontWeight: 600 }}>{plan.title}</h1>
                 <p className="text-text-muted text-lg" style={{ fontFamily: 'var(--st-gothic)' }}>{plan.area} ・ {plan.days}日間のしおり</p>
+                {/* AI生成情報の免責（商用監査 1-3 対応・常設） */}
+                <p className="text-xs mt-2" style={{ color: 'var(--st-ink-soft, #718096)' }}>
+                  ※ AIによる参考情報です。営業時間・料金・定休日は必ず公式情報をご確認ください。
+                </p>
               </div>
             </div>
             
@@ -2153,6 +2196,19 @@ export const PlanDetail: React.FC<{ planId: string; onNavigate: (path: string) =
             planSpots={localPlanSpots.length > 0 ? localPlanSpots : plan.spots}
             areaName={plan.area}
             selectedDay={selectedDay}
+            transportOverride={(() => {
+              // 選択中の日の区間で切り替えられた移動手段の多数決をルート計算へ反映
+              const daySpotIds = new Set(
+                (localPlanSpots.length > 0 ? localPlanSpots : plan.spots)
+                  .filter(ps => ps.day === selectedDay).map(ps => ps.id)
+              );
+              const counts: Record<string, number> = {};
+              (Object.entries(transportModes) as Array<[string, string]>).forEach(([id, m]) => {
+                if (daySpotIds.has(id)) counts[m] = (counts[m] || 0) + 1;
+              });
+              const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+              return top ? top[0] : undefined;
+            })()}
             planId={plan.id}
             visibleDays={visibleDays}
             onRouteInfoUpdate={(day, info) => {

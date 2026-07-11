@@ -94,16 +94,20 @@ def add_hotels_to_plan_spots(
 ) -> List[Dict[str, Any]]:
     """
     プランスポットに宿泊施設を追加
-    
+
+    request.include_hotels が False の場合（宿泊は自分で手配する選択）は何も追加しない。
+
     Args:
         plan_spots: 既存のプランスポットリスト
         request: プラン生成リクエスト
         db: データベースセッション
         area: エリア名
-    
+
     Returns:
         宿泊施設が追加されたプランスポットリスト
     """
+    if getattr(request, "include_hotels", True) is False:
+        return plan_spots
     try:
         from datetime import datetime, timedelta
         from app.services.spot_service import get_spots
@@ -1293,6 +1297,7 @@ async def export_plan_ical(
 async def get_plan_route(
     plan_id: str,
     day: Optional[int] = None,
+    transportation: Optional[str] = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -1338,9 +1343,17 @@ async def get_plan_route(
             detail="ルート情報を取得するには、少なくとも2つのスポットが必要です"
         )
     
-    # ルート情報を取得
-    route_info = get_route_info(coordinates)
-    
+    # ルート情報を取得（フロントの移動手段切替を profile に反映）
+    # OSRM に transit プロファイルは無いため、公共交通機関は driving 経路で近似する
+    profile_map = {
+        "car": "driving", "車": "driving",
+        "walk": "walking", "徒歩": "walking",
+        "public": "driving", "公共交通機関": "driving", "電車": "driving", "バス": "driving",
+    }
+    profile = profile_map.get(transportation or "", "driving")
+    # 同期HTTP（OSRM）はイベントループを塞がないようスレッドへ（CLAUDE.md 参照）
+    route_info = await asyncio.to_thread(get_route_info, coordinates, profile)
+
     if not route_info:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

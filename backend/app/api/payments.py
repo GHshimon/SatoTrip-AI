@@ -1,6 +1,7 @@
 """
 決済API（Stripe）
 """
+import asyncio
 import logging
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
@@ -9,6 +10,7 @@ from pydantic import BaseModel
 from app.utils.database import get_db
 from app.dependencies import get_current_user
 from app.models.user import User
+from app.models.subscription import Subscription
 from app.config import settings
 from app.utils import payment as payment_util
 from app.utils.subscription import PLANS
@@ -49,7 +51,9 @@ async def create_checkout(
             detail="指定のプランは購入できません"
         )
     base_url = settings.FRONTEND_URL.rstrip("/") + "/settings"
-    result = payment_util.create_checkout_session(
+    # Stripe SDK は同期I/Oのためスレッドへ逃がす（イベントループを塞がない）
+    result = await asyncio.to_thread(
+        payment_util.create_checkout_session,
         payload.plan_name, current_user.id, base_url, db
     )
     if not result:
@@ -84,7 +88,55 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
             detail="Webhook署名の検証に失敗しました"
         )
 
-    if event.get("type") == "checkout.session.completed":
-        payment_util.handle_checkout_completed(event, db)
+    event_type = event.get("type")
+    if event_type == "checkout.session.completed":
+        # 初回決済: プラン昇格＋Stripe customer/subscription ID を保存
+        await asyncio.to_thread(payment_util.handle_checkout_completed, event, db)
+    elif event_type == "invoice.paid":
+        # 継続課金: 有効期限を period_end まで延長
+        await asyncio.to_thread(payment_util.handle_invoice_paid, event, db)
+    elif event_type == "customer.subscription.deleted":
+        # 解約完了: free に降格
+        await asyncio.to_thread(payment_util.handle_subscription_deleted, event, db)
+    elif event_type == "invoice.payment_failed":
+        # 支払失敗: free に降格
+        await asyncio.to_thread(payment_util.handle_payment_failed, event, db)
+    # 上記以外のイベントは何もせず 200 を返す（Stripe の再送を防ぐ）
 
     return {"received": True}
+
+
+@router.post("/portal")
+async def create_billing_portal(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Stripe カスタマーポータルのセッションを作成し、URLを返す。
+    解約・支払方法変更・請求履歴の確認はポータル側で行う。
+    """
+    if not payment_util.is_configured():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="決済機能は現在利用できません（サーバー未設定）"
+        )
+    subscription = db.query(Subscription).filter(
+        Subscription.user_id == current_user.id
+    ).first()
+    if not subscription or not subscription.stripe_customer_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="サブスクリプションが見つかりません"
+        )
+    return_url = settings.FRONTEND_URL.rstrip("/") + "/#/settings"
+    url = await asyncio.to_thread(
+        payment_util.create_billing_portal_session,
+        subscription.stripe_customer_id,
+        return_url,
+    )
+    if not url:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="カスタマーポータルの作成に失敗しました"
+        )
+    return {"url": url}

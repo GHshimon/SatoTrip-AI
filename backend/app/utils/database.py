@@ -41,3 +41,29 @@ def get_db() -> Session:
 def init_db():
     """データベースを初期化（テーブル作成）"""
     Base.metadata.create_all(bind=engine)
+    _apply_simple_migrations()
+
+
+def _apply_simple_migrations():
+    """
+    既存テーブルへの後付けカラム追加（簡易マイグレーション）。
+    create_all は新規テーブルしか作らないため、既存テーブルに対しては
+    「存在しなければ ALTER TABLE ADD COLUMN」を試みる。
+    SQLite / PostgreSQL どちらも「既に存在する」場合はエラーになるので、
+    素朴に try/except で握りつぶす（冪等）。
+    """
+    from sqlalchemy import text
+
+    statements = [
+        "ALTER TABLE subscriptions ADD COLUMN stripe_customer_id VARCHAR",
+        "ALTER TABLE subscriptions ADD COLUMN stripe_subscription_id VARCHAR",
+    ]
+    for stmt in statements:
+        # DDLごとに接続を分ける（失敗したトランザクションを持ち越さないため）
+        try:
+            with engine.connect() as conn:
+                conn.execute(text(stmt))
+                conn.commit()
+        except Exception:
+            # カラムが既に存在する等。起動を妨げない。
+            pass

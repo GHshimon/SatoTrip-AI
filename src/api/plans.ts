@@ -13,6 +13,8 @@ export interface PlanGenerateRequest {
   check_in_date?: string;
   check_out_date?: string;
   num_guests?: number;
+  /** false で宿泊施設をプランに含めない（自分で手配する場合） */
+  include_hotels?: boolean;
 }
 
 export interface PlanCreateRequest {
@@ -117,9 +119,16 @@ export async function deletePlan(id: string): Promise<void> {
 /**
  * プランのルート情報取得
  */
-export async function getPlanRoute(planId: string, day?: number): Promise<PlanRouteResponse> {
-  const params = day !== undefined ? `?day=${day}` : '';
-  const response = await apiClient.get<PlanRouteResponse>(`/api/plans/${planId}/route${params}`);
+export async function getPlanRoute(
+  planId: string,
+  day?: number,
+  transportation?: string,
+): Promise<PlanRouteResponse> {
+  const qs = new URLSearchParams();
+  if (day !== undefined) qs.set('day', String(day));
+  if (transportation) qs.set('transportation', transportation);
+  const suffix = qs.toString() ? `?${qs.toString()}` : '';
+  const response = await apiClient.get<PlanRouteResponse>(`/api/plans/${planId}/route${suffix}`);
   return response;
 }
 

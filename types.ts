@@ -153,6 +153,8 @@ export interface PlanRequest {
   checkInDate?: string;
   checkOutDate?: string;
   numGuests?: number;
+  /** false で宿泊施設の提案をスキップ（自分で手配する場合） */
+  includeHotels?: boolean;
 }
 
 export interface HotelCategory {
