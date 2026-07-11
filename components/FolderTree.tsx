@@ -50,37 +50,19 @@ export const FolderTree: React.FC<FolderTreeProps> = ({ folders, selectedFolderI
     };
 
     const handleCreate = async () => {
-        // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/0154fa29-b553-4de4-8ba1-d0609672b9f3',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FolderTree.tsx:52',message:'handleCreate called',data:{newFolderName,isCreating,trimmedLength:newFolderName.trim().length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-        // #endregion
         if (!newFolderName.trim()) {
-            // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/0154fa29-b553-4de4-8ba1-d0609672b9f3',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FolderTree.tsx:54',message:'Validation failed - empty name',data:{newFolderName,isCreating},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-            // #endregion
             return;
         }
         try {
-            // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/0154fa29-b553-4de4-8ba1-d0609672b9f3',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FolderTree.tsx:58',message:'Creating folder - before API call',data:{name:newFolderName.trim(),parent_id:null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-            // #endregion
             // UI shows input at root level, so always create at root for now
             await folderApi.createFolder({ name: newFolderName, parent_id: null });
-            // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/0154fa29-b553-4de4-8ba1-d0609672b9f3',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FolderTree.tsx:60',message:'Folder created successfully',data:{name:newFolderName.trim()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-            // #endregion
             // Improving: If a folder is selected, create inside it? Or simpler: Root creation only initially.
             // Let's stick to Root creation for the main input.
             onUpdate();
             setNewFolderName('');
             setIsCreating(false);
-            // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/0154fa29-b553-4de4-8ba1-d0609672b9f3',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FolderTree.tsx:65',message:'State updated after success',data:{isCreating:false,newFolderName:''},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-            // #endregion
             showSuccess('フォルダを作成しました');
         } catch (err) {
-            // #region agent log
-            fetch('http://127.0.0.1:7243/ingest/0154fa29-b553-4de4-8ba1-d0609672b9f3',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FolderTree.tsx:68',message:'Folder creation failed',data:{error:String(err),isCreating},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-            // #endregion
             console.error(err);
             showError('フォルダ作成に失敗しました');
         }
@@ -216,27 +198,15 @@ export const FolderTree: React.FC<FolderTreeProps> = ({ folders, selectedFolderI
                                 placeholder="フォルダ名"
                                 value={newFolderName}
                                 onChange={(e) => {
-                                    // #region agent log
-                                    fetch('http://127.0.0.1:7243/ingest/0154fa29-b553-4de4-8ba1-d0609672b9f3',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FolderTree.tsx:198',message:'Folder name input changed',data:{newValue:e.target.value,isCreating},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-                                    // #endregion
                                     setNewFolderName(e.target.value);
                                 }}
                                 onKeyDown={(e) => {
-                                    // #region agent log
-                                    fetch('http://127.0.0.1:7243/ingest/0154fa29-b553-4de4-8ba1-d0609672b9f3',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FolderTree.tsx:204',message:'Key pressed in folder input',data:{key:e.key,newFolderName,isCreating},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-                                    // #endregion
                                     if (e.key === 'Enter') handleCreate();
                                     if (e.key === 'Escape') {
-                                        // #region agent log
-                                        fetch('http://127.0.0.1:7243/ingest/0154fa29-b553-4de4-8ba1-d0609672b9f3',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FolderTree.tsx:207',message:'Escape pressed - canceling creation',data:{isCreating},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-                                        // #endregion
                                         setIsCreating(false);
                                     }
                                 }}
                                 onBlur={() => {
-                                    // #region agent log
-                                    fetch('http://127.0.0.1:7243/ingest/0154fa29-b553-4de4-8ba1-d0609672b9f3',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FolderTree.tsx:213',message:'Input blurred',data:{newFolderName,isCreating,trimmedLength:newFolderName.trim().length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-                                    // #endregion
                                     if (!newFolderName.trim()) {
                                         setIsCreating(false);
                                     }

@@ -6,7 +6,7 @@ from typing import Dict, Any
 SETTINGS_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "system_settings.json")
 
 DEFAULT_SETTINGS = {
-    "gemini_model": "gemini-2.0-flash-exp",
+    "gemini_model": "gemini-2.5-flash",
     "temperature": 0.7,
     "grounding": True,
     "system_prompt": """あなたは旅行代理店AIエージェント「SatoTrip」です。

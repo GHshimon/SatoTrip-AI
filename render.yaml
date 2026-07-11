@@ -1,0 +1,28 @@
+# Render Blueprint — SatoTrip バックエンド(FastAPI)
+# 使い方: Render ダッシュボード → New → Blueprint → このリポジトリを選択。
+# sync: false の環境変数は初回デプロイ時にダッシュボードで入力を求められます。
+# 詳細手順: docs/DEPLOY_RENDER.md
+services:
+  - type: web
+    name: satotrip-api
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: GEMINI_API_KEY
+        sync: false # Google AI Studio で発行したキー
+      - key: DATABASE_URL
+        sync: false # Supabase の接続文字列(postgresql://...)。未設定なら SQLite(再起動で消える)
+      - key: JWT_SECRET_KEY
+        generateValue: true # Render が強力なランダム値を自動生成
+      - key: CORS_ORIGINS
+        sync: false # フロントのURL(カンマ区切り)。例: https://sato-trip-ai-....vercel.app
+      - key: FRONTEND_URL
+        sync: false # パスワードリセットメール等のリンク先。CORS_ORIGINS の代表1つと同じでよい
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash

@@ -9,25 +9,6 @@ from typing import Dict, Any, Optional, Tuple
 from datetime import datetime, timedelta
 from app.models.subscription import Subscription, Usage
 
-# #region agent log
-LOG_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), ".cursor", "debug.log")
-def _log(hypothesis_id, location, message, data):
-    try:
-        import json as _json
-        log_entry = {
-            "sessionId": "debug-session",
-            "runId": "run1",
-            "hypothesisId": hypothesis_id,
-            "location": location,
-            "message": message,
-            "data": data,
-            "timestamp": int(datetime.now().timestamp() * 1000)
-        }
-        os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
-        with open(LOG_PATH, "a", encoding="utf-8") as f:
-            f.write(_json.dumps(log_entry, ensure_ascii=False) + "\n")
-    except: pass
-# #endregion
 
 # プラン定義
 PLANS = {
@@ -82,33 +63,18 @@ def can_generate_plan(db: Session, user_id: str) -> Tuple[bool, str, int]:
     プラン生成可能かチェック
     Returns: (can_generate, message, remaining)
     """
-    # #region agent log
-    _log("A", "subscription.py:59", "can_generate_plan called", {"user_id": user_id})
-    # #endregion
     
     plan_name = get_user_plan(db, user_id)
-    # #region agent log
-    _log("A", "subscription.py:64", "plan_name retrieved", {"plan_name": plan_name, "user_id": user_id})
-    # #endregion
     
     plan = PLANS[plan_name]
-    # #region agent log
-    _log("C", "subscription.py:65", "plan retrieved", {"plan_name": plan_name, "monthly_plans": plan.get("monthly_plans")})
-    # #endregion
     
     # 無制限プラン
     if plan["monthly_plans"] == -1:
-        # #region agent log
-        _log("C", "subscription.py:68", "unlimited plan detected", {"plan_name": plan_name})
-        # #endregion
         return True, "", -1
     
     # 使用量取得
     now = datetime.now()
     current_month = f"{now.year}-{now.month:02d}"
-    # #region agent log
-    _log("B", "subscription.py:73", "current_month calculated", {"current_month": current_month, "now": now.isoformat(), "year": now.year, "month": now.month})
-    # #endregion
     
     usage = db.query(Usage).filter(
         and_(
@@ -116,29 +82,14 @@ def can_generate_plan(db: Session, user_id: str) -> Tuple[bool, str, int]:
             Usage.month == current_month
         )
     ).first()
-    # #region agent log
-    _log("E", "subscription.py:75", "usage queried from db", {"user_id": user_id, "current_month": current_month, "usage_exists": usage is not None})
-    # #endregion
     
     monthly_usage = usage.count if usage else 0
-    # #region agent log
-    _log("B", "subscription.py:82", "monthly_usage retrieved", {"current_month": current_month, "monthly_usage": monthly_usage})
-    # #endregion
     
     remaining = plan["monthly_plans"] - monthly_usage
-    # #region agent log
-    _log("D", "subscription.py:83", "remaining calculated", {"monthly_plans": plan["monthly_plans"], "monthly_usage": monthly_usage, "remaining": remaining})
-    # #endregion
     
     if remaining > 0:
-        # #region agent log
-        _log("D", "subscription.py:85", "remaining > 0, allowing", {"remaining": remaining})
-        # #endregion
         return True, f"残り{remaining}回", remaining
     else:
-        # #region agent log
-        _log("D", "subscription.py:87", "remaining <= 0, blocking", {"remaining": remaining, "monthly_plans": plan["monthly_plans"], "monthly_usage": monthly_usage})
-        # #endregion
         return False, f"今月のプラン生成上限に達しました（{monthly_usage}/{plan['monthly_plans']}回使用済み）。来月までお待ちいただくか、プランをアップグレードしてください。", 0
 
 

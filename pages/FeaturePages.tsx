@@ -6,6 +6,7 @@ import { HotelCategory, HotelSearchRequest, HotelSearchResult } from '../types';
 import { AppConfig } from '../config';
 import * as planApi from '../src/api/plans';
 import * as spotApi from '../src/api/spots';
+import * as favoritesApi from '../src/api/favorites';
 import { Plan, Spot } from '../types';
 import { SpotMap } from '../components/SpotMap';
 import { useToast } from '../components/Toast';
@@ -119,7 +120,8 @@ export const PlanList: React.FC<{ onNavigate: (path: string) => void }> = ({ onN
       await planApi.updatePlan(plan.id, { is_favorite: newStatus });
     } catch (err) {
       console.error('Failed to update favorite:', err);
-      setPlansList(prev => prev.map(p => p.id === plan.id ? { ...p, isFavorite: !plan.isFavorite } : p));
+      // ロールバック: 楽観的更新を取り消し、元の値に戻す
+      setPlansList(prev => prev.map(p => p.id === plan.id ? { ...p, isFavorite: plan.isFavorite } : p));
       showError('お気に入りの更新に失敗しました');
     }
   };
@@ -186,18 +188,9 @@ export const PlanList: React.FC<{ onNavigate: (path: string) => void }> = ({ onN
   // Bulk Move
   const handleBulkMove = async () => {
     if (selectedIds.length === 0) return;
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/0154fa29-b553-4de4-8ba1-d0609672b9f3',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FeaturePages.tsx:187',message:'handleBulkMove called',data:{targetMoveFolderId,selectedIds,foldersCount:folders.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion
     try {
       const folderId = targetMoveFolderId === 'root' ? null : targetMoveFolderId;
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/0154fa29-b553-4de4-8ba1-d0609672b9f3',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FeaturePages.tsx:192',message:'Before updatePlan calls',data:{folderId,selectedIds,validFolderId:folderId !== null ? folders.find(f => f.id === folderId) !== undefined : true},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-      // #endregion
       await Promise.all(selectedIds.map(id => planApi.updatePlan(id, { folder_id: folderId })));
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/0154fa29-b553-4de4-8ba1-d0609672b9f3',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FeaturePages.tsx:195',message:'Plans moved successfully',data:{folderId,selectedIdsCount:selectedIds.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-      // #endregion
       
       // Update local state
       setPlansList(prev => prev.map(p => selectedIds.includes(p.id) ? { ...p, folderId: folderId || undefined } : p));
@@ -207,9 +200,6 @@ export const PlanList: React.FC<{ onNavigate: (path: string) => void }> = ({ onN
       setIsMoveModalOpen(false);
       showSuccess('プランを移動しました');
     } catch (err) {
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/0154fa29-b553-4de4-8ba1-d0609672b9f3',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'FeaturePages.tsx:204',message:'Move failed',data:{error:String(err),targetMoveFolderId,selectedIds},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-      // #endregion
       console.error('Move failed:', err);
       showError('移動に失敗しました');
     }
@@ -459,8 +449,11 @@ export const PrefectureSpots: React.FC<{ area: string; onNavigate: (path: string
   const [selectedCategory, setSelectedCategory] = useState('すべて');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [areaSpots, setAreaSpots] = useState<Spot[]>([]);
+  const [sortBy, setSortBy] = useState<'rating' | 'name'>('rating');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
+  const { showSuccess, showError } = useToast();
 
   const categoryMap: { [key: string]: string } = {
     '歴史': 'History',
@@ -505,8 +498,21 @@ export const PrefectureSpots: React.FC<{ area: string; onNavigate: (path: string
     fetchSpots();
   }, [area]);
 
+  // お気に入りスポットIDを取得（失敗しても画面は壊さない）
+  useEffect(() => {
+    const fetchFavoriteIds = async () => {
+      try {
+        const ids = await favoritesApi.getFavoriteSpotIds();
+        setFavoriteIds(new Set(ids));
+      } catch (err) {
+        console.error('Failed to fetch favorite spot ids:', err);
+      }
+    };
+    fetchFavoriteIds();
+  }, []);
+
   const filteredSpots = useMemo(() => {
-    return areaSpots.filter(s => {
+    const result = areaSpots.filter(s => {
       const matchSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         s.description.toLowerCase().includes(searchTerm.toLowerCase());
 
@@ -518,11 +524,55 @@ export const PrefectureSpots: React.FC<{ area: string; onNavigate: (path: string
 
       return matchSearch && matchCategory;
     });
-  }, [areaSpots, searchTerm, selectedCategory]);
 
-  const handleFavorite = (e: React.MouseEvent) => {
+    // クライアント側で並び替え
+    if (sortBy === 'name') {
+      result.sort((a, b) => a.name.localeCompare(b.name, 'ja'));
+    } else {
+      result.sort((a, b) => b.rating - a.rating);
+    }
+
+    return result;
+  }, [areaSpots, searchTerm, selectedCategory, sortBy]);
+
+  const handleFavorite = async (e: React.MouseEvent, spotId: string) => {
     e.stopPropagation();
-    alert('お気に入りに保存しました！（デモ）');
+
+    const isFavorite = favoriteIds.has(spotId);
+
+    // 楽観的更新: 先にstateを更新
+    setFavoriteIds(prev => {
+      const next = new Set(prev);
+      if (isFavorite) {
+        next.delete(spotId);
+      } else {
+        next.add(spotId);
+      }
+      return next;
+    });
+
+    try {
+      if (isFavorite) {
+        await favoritesApi.removeFavoriteSpot(spotId);
+        showSuccess('お気に入りから削除しました');
+      } else {
+        await favoritesApi.addFavoriteSpot(spotId);
+        showSuccess('お気に入りに追加しました');
+      }
+    } catch (err) {
+      console.error('Failed to update favorite spot:', err);
+      // 失敗したらstateを元に戻す
+      setFavoriteIds(prev => {
+        const next = new Set(prev);
+        if (isFavorite) {
+          next.add(spotId);
+        } else {
+          next.delete(spotId);
+        }
+        return next;
+      });
+      showError('お気に入りの更新に失敗しました。ログインが必要です');
+    }
   };
 
   const toggleSelection = (id: string) => {
@@ -532,7 +582,10 @@ export const PrefectureSpots: React.FC<{ area: string; onNavigate: (path: string
   };
 
   const handleCreatePlan = () => {
-    localStorage.setItem(AppConfig.STORAGE_KEYS.PENDING_SPOTS, JSON.stringify(selectedIds));
+    // Store selected spot objects (not just IDs) so CreatePlan can use them directly
+    // without matching against mockData. Works with real API spots.
+    const selectedSpots = areaSpots.filter(s => selectedIds.includes(s.id));
+    localStorage.setItem(AppConfig.STORAGE_KEYS.PENDING_SPOTS, JSON.stringify(selectedSpots));
     onNavigate('/create');
   };
 
@@ -579,9 +632,13 @@ export const PrefectureSpots: React.FC<{ area: string; onNavigate: (path: string
           />
         </div>
         <div className="flex-shrink-0 relative w-full md:w-48">
-          <select className="w-full appearance-none pl-4 pr-10 py-3 rounded-full border-none bg-white shadow-sm focus:ring-2 focus:ring-primary">
-            <option>人気順</option>
-            <option>おすすめ順</option>
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as 'rating' | 'name')}
+            className="w-full appearance-none pl-4 pr-10 py-3 rounded-full border-none bg-white shadow-sm focus:ring-2 focus:ring-primary"
+          >
+            <option value="rating">評価が高い順</option>
+            <option value="name">名前順</option>
           </select>
           <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-text-muted">expand_more</span>
         </div>
@@ -617,8 +674,14 @@ export const PrefectureSpots: React.FC<{ area: string; onNavigate: (path: string
                     <span className="material-symbols-outlined text-lg">check</span>
                   </div>
 
-                  <button onClick={handleFavorite} className="absolute top-3 right-3 w-10 h-10 bg-black/30 backdrop-blur-sm rounded-full flex items-center justify-center hover:bg-black/50 text-white transition-colors z-10">
-                    <span className="material-symbols-outlined">bookmark</span>
+                  <button
+                    onClick={(e) => handleFavorite(e, spot.id)}
+                    className={`absolute top-3 right-3 w-10 h-10 backdrop-blur-sm rounded-full flex items-center justify-center transition-colors z-10 ${favoriteIds.has(spot.id) ? 'bg-primary text-white hover:bg-primary/90' : 'bg-black/30 text-white hover:bg-black/50'}`}
+                    title={favoriteIds.has(spot.id) ? 'お気に入りから削除' : 'お気に入りに追加'}
+                  >
+                    <span className={`material-symbols-outlined ${favoriteIds.has(spot.id) ? 'fill' : ''}`}>
+                      {favoriteIds.has(spot.id) ? 'bookmark' : 'bookmark_border'}
+                    </span>
                   </button>
                   <div className="absolute bottom-0 left-0 w-full p-4 bg-gradient-to-t from-black/70 to-transparent">
                     <h3 className="text-xl font-bold text-white">{spot.name}</h3>
@@ -669,10 +732,32 @@ export const FavoriteSpots: React.FC<{ onNavigate: (path: string) => void }> = (
   const [selectedCategory, setSelectedCategory] = useState('すべて');
   const [sortBy, setSortBy] = useState<'rating' | 'name'>('rating');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [favoriteSpots, setFavoriteSpots] = useState<Spot[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const { showSuccess, showError } = useToast();
 
-  // Extract unique values for filters
-  const availableAreas = useMemo(() => ['すべて', ...Array.from(new Set(spots.map(s => s.area)))], []);
-  const availableCategories = useMemo(() => ['すべて', ...Array.from(new Set(spots.map(s => s.category)))], []);
+  // マウント時に実APIからお気に入りスポットを取得
+  useEffect(() => {
+    const fetchFavorites = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+        const fetched = await favoritesApi.getFavoriteSpots();
+        setFavoriteSpots(fetched);
+      } catch (err: any) {
+        console.error('Failed to fetch favorite spots:', err);
+        setError(err.detail || err.message || 'お気に入りスポットの取得に失敗しました');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchFavorites();
+  }, []);
+
+  // Extract unique values for filters（取得したお気に入りリスト基準）
+  const availableAreas = useMemo(() => ['すべて', ...Array.from(new Set(favoriteSpots.map(s => s.area)))], [favoriteSpots]);
+  const availableCategories = useMemo(() => ['すべて', ...Array.from(new Set(favoriteSpots.map(s => s.category)))], [favoriteSpots]);
 
   // Translate categories for display if needed (Simple mapping)
   const getCategoryLabel = (cat: string) => {
@@ -687,7 +772,7 @@ export const FavoriteSpots: React.FC<{ onNavigate: (path: string) => void }> = (
   };
 
   const filteredSpots = useMemo(() => {
-    let result = spots.filter(s => {
+    let result = favoriteSpots.filter(s => {
       const matchSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         s.description.toLowerCase().includes(searchTerm.toLowerCase());
       const matchArea = selectedArea === 'すべて' || s.area === selectedArea;
@@ -703,7 +788,7 @@ export const FavoriteSpots: React.FC<{ onNavigate: (path: string) => void }> = (
     }
 
     return result;
-  }, [searchTerm, selectedArea, selectedCategory, sortBy]);
+  }, [favoriteSpots, searchTerm, selectedArea, selectedCategory, sortBy]);
 
   const toggleSelection = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
@@ -712,11 +797,76 @@ export const FavoriteSpots: React.FC<{ onNavigate: (path: string) => void }> = (
     );
   };
 
+  // お気に入りから削除
+  const handleRemoveFavorite = async (e: React.MouseEvent, spotId: string) => {
+    e.stopPropagation();
+    try {
+      await favoritesApi.removeFavoriteSpot(spotId);
+      setFavoriteSpots(prev => prev.filter(s => s.id !== spotId));
+      setSelectedIds(prev => prev.filter(id => id !== spotId));
+      showSuccess('お気に入りから削除しました');
+    } catch (err) {
+      console.error('Failed to remove favorite spot:', err);
+      showError('お気に入りの更新に失敗しました。ログインが必要です');
+    }
+  };
+
   const handleCreatePlan = () => {
-    // Store selected spots in localStorage to pass to CreatePlan page
-    localStorage.setItem(AppConfig.STORAGE_KEYS.PENDING_SPOTS, JSON.stringify(selectedIds));
+    // Store selected spot objects (not just IDs) so CreatePlan can use them directly.
+    // Works with real API favorite spots.
+    const selectedSpots = favoriteSpots.filter(s => selectedIds.includes(s.id));
+    localStorage.setItem(AppConfig.STORAGE_KEYS.PENDING_SPOTS, JSON.stringify(selectedSpots));
     onNavigate('/create');
   };
+
+  if (isLoading) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-8 py-10">
+        <div className="flex justify-center items-center min-h-[400px]">
+          <div className="text-center">
+            <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-text-muted">お気に入りスポットを読み込み中...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-8 py-10">
+        <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-center">
+          <p className="text-red-600 font-bold mb-2">エラーが発生しました</p>
+          <p className="text-red-500 text-sm">{error}</p>
+        </div>
+      </div>
+    );
+  }
+
+  // お気に入りが1件も無い場合の空状態
+  if (favoriteSpots.length === 0) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-8 py-10 pb-32">
+        <div className="mb-8">
+          <h1 className="text-3xl md:text-4xl font-black text-text-light mb-2">お気に入りスポット</h1>
+          <p className="text-text-muted">保存したスポットをエリアやカテゴリーで整理して、次の旅に備えましょう。</p>
+        </div>
+        <div className="py-20 text-center bg-gray-50 rounded-2xl border border-dashed border-gray-300">
+          <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
+            <span className="material-symbols-outlined text-4xl text-gray-400">bookmark_border</span>
+          </div>
+          <h3 className="text-xl font-bold text-text-light mb-2">お気に入りスポットがありません</h3>
+          <p className="text-text-muted mb-6">気になるスポットをお気に入りに追加すると、ここに表示されます。</p>
+          <button
+            onClick={() => onNavigate('/myspots')}
+            className="bg-primary text-white px-6 py-3 rounded-full font-bold shadow-lg hover:opacity-90 transition-opacity"
+          >
+            スポットを探す
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-8 py-10 pb-32">
@@ -827,7 +977,11 @@ export const FavoriteSpots: React.FC<{ onNavigate: (path: string) => void }> = (
                 </div>
 
                 <div className="absolute top-3 right-3">
-                  <button className="w-10 h-10 bg-primary text-white rounded-full flex items-center justify-center shadow-lg transform hover:scale-110 transition-transform" title="お気に入りから削除">
+                  <button
+                    onClick={(e) => handleRemoveFavorite(e, spot.id)}
+                    className="w-10 h-10 bg-primary text-white rounded-full flex items-center justify-center shadow-lg transform hover:scale-110 transition-transform"
+                    title="お気に入りから削除"
+                  >
                     <span className="material-symbols-outlined fill">bookmark</span>
                   </button>
                 </div>
@@ -1126,6 +1280,7 @@ export const MySpots: React.FC<{ onNavigate: (path: string) => void }> = ({ onNa
   const [addSearchQuery, setAddSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Spot[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const { showInfo } = useToast();
 
   // Fetch available filter options (Mock or from API if available)
   const availableAreas = useMemo(() => ['すべて', '北海道', '東京', '京都', '大阪', '福岡', '沖縄'], []);
@@ -1188,7 +1343,15 @@ export const MySpots: React.FC<{ onNavigate: (path: string) => void }> = ({ onNa
 
 
   const handleCreatePlan = () => {
-    localStorage.setItem(AppConfig.STORAGE_KEYS.PENDING_SPOTS, JSON.stringify(selectedIds));
+    // Store selected spot objects (not just IDs) so CreatePlan can use them directly
+    // without matching against mockData. Works with real API spots.
+    // Combine displayed and locally-added spots, dedupe by id.
+    const byId = new Map<string, Spot>();
+    [...filteredSpots, ...allSpots].forEach(s => byId.set(s.id, s));
+    const selectedSpots = selectedIds
+      .map(id => byId.get(id))
+      .filter((s): s is Spot => !!s);
+    localStorage.setItem(AppConfig.STORAGE_KEYS.PENDING_SPOTS, JSON.stringify(selectedSpots));
     onNavigate('/create');
   };
 
@@ -1220,8 +1383,9 @@ export const MySpots: React.FC<{ onNavigate: (path: string) => void }> = ({ onNa
     return () => clearTimeout(timeoutId);
   }, [addSearchQuery, isAddingSpot, allSpots]);
 
-  const handleAddSpot = (spot: Spot) => {
-    setFilteredSpots(prev => [spot, ...prev]);
+  const handleAddSpot = (_spot: Spot) => {
+    // 一般ユーザー向けのスポット永続化APIが存在しないため、ローカル追加は行わず準備中を通知する。
+    showInfo('スポットの追加は現在準備中です');
     setAddSearchQuery('');
     setSearchResults([]);
     setIsAddingSpot(false);
@@ -1448,7 +1612,7 @@ export const MySpots: React.FC<{ onNavigate: (path: string) => void }> = ({ onNa
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
-            <button className="px-4 py-2 border border-gray-200 rounded-xl flex items-center gap-2 text-sm font-bold hover:bg-gray-50"><span className="material-symbols-outlined">filter_list</span> フィルター</button>
+            <button onClick={() => showInfo('フィルター機能は現在準備中です')} className="px-4 py-2 border border-gray-200 rounded-xl flex items-center gap-2 text-sm font-bold hover:bg-gray-50"><span className="material-symbols-outlined">filter_list</span> フィルター</button>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left whitespace-nowrap">
@@ -1483,8 +1647,8 @@ export const MySpots: React.FC<{ onNavigate: (path: string) => void }> = ({ onNa
                         <td className="p-4">{spot.area}</td>
                         <td className="p-4"><span className="bg-primary/10 text-primary px-3 py-1 rounded-full text-xs font-bold">{spot.category}</span></td>
                         <td className="p-4 text-right">
-                          <button className="p-2 hover:bg-gray-200 rounded-full text-text-muted transition-colors mr-2" title="編集"><span className="material-symbols-outlined">edit</span></button>
-                          <button className="p-2 hover:bg-red-100 rounded-full text-red-500 transition-colors" title="削除"><span className="material-symbols-outlined">delete</span></button>
+                          <button onClick={(e) => { e.stopPropagation(); showInfo('スポットの編集・削除は現在準備中です'); }} className="p-2 hover:bg-gray-200 rounded-full text-text-muted transition-colors mr-2" title="編集"><span className="material-symbols-outlined">edit</span></button>
+                          <button onClick={(e) => { e.stopPropagation(); showInfo('スポットの編集・削除は現在準備中です'); }} className="p-2 hover:bg-red-100 rounded-full text-red-500 transition-colors" title="削除"><span className="material-symbols-outlined">delete</span></button>
                         </td>
                       </tr>
                     );

@@ -136,6 +136,8 @@ export interface BulkAddRequest {
 export interface BulkAddResponse {
   success: boolean;
   imported: number;
+  created?: number;
+  merged?: number;
   errors: number;
   skipped: number;
   total_keywords: number;
@@ -250,7 +252,25 @@ export async function normalizeTags(tags: string[]): Promise<TagNormalizeRespons
 /**
  * バックエンドのレスポンスをフロントエンドのSpot型に変換
  */
-function transformSpotResponse(data: any): Spot {
+/**
+ * tags を配列に正規化する。
+ * バックエンドが JSON 文字列（例 '["a","b"]'）や null を返すケースがあり、
+ * そのまま渡すと UI 側の `.map` で実行時エラー（白画面）になるため。
+ */
+function normalizeTagsArray(tags: any): any[] {
+  if (Array.isArray(tags)) return tags;
+  if (typeof tags === 'string') {
+    try {
+      const parsed = JSON.parse(tags);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return tags ? [tags] : [];
+    }
+  }
+  return [];
+}
+
+export function transformSpotResponse(data: any): Spot {
   return {
     id: data.id,
     name: data.name,
@@ -262,7 +282,7 @@ function transformSpotResponse(data: any): Spot {
     rating: data.rating || 0,
     image: data.image || '',
     price: data.price,
-    tags: data.tags || [],
+    tags: normalizeTagsArray(data.tags),
     location: data.latitude && data.longitude
       ? { lat: data.latitude, lng: data.longitude }
       : undefined,

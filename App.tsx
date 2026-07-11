@@ -4,10 +4,13 @@ import { Home, NotFound, UserProfile, Settings, LoginPage } from './pages/Public
 import { PlanList, PrefectureSpots, HotelList, FavoriteSpots, MySpots } from './pages/FeaturePages';
 import { PlanDetail, PlanEditor, CreatePlan } from './pages/PlanPages';
 import { AdminDashboard, AdminUsers, AdminSpots, AdminAiSettings, AdminTags } from './pages/AdminPages';
+import { TermsOfService, PrivacyPolicy, CommercialTransactionAct, Contact } from './pages/LegalPages';
+import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { plans, currentUser } from './mockData';
 import { AppConfig } from './config';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import { ToastProvider } from './components/Toast';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 // Simple Hash Router Implementation
 const AppContent: React.FC = () => {
@@ -52,6 +55,8 @@ const AppContent: React.FC = () => {
     
     // Auth Routes
     if (route === '/login') return <Layout onNavigate={navigate} currentPath={route} isAuthenticated={isAuthenticated} onLogout={onLogout}><LoginPage onLogin={handleLogin} /></Layout>;
+    // パスワード再設定（メールのリンク: /reset-password?token=...）
+    if (route.startsWith('/reset-password')) return <Layout onNavigate={navigate} currentPath={route} isAuthenticated={isAuthenticated} onLogout={onLogout}><ResetPasswordPage onNavigate={navigate} /></Layout>;
 
     // Static Layout Routes
     if (route === '/') return <Layout onNavigate={navigate} currentPath={route} isAuthenticated={isAuthenticated} onLogout={onLogout}><Home onNavigate={navigate} /></Layout>;
@@ -60,7 +65,13 @@ const AppContent: React.FC = () => {
     if (route === '/favorites') return <Layout onNavigate={navigate} currentPath={route} isAuthenticated={isAuthenticated} onLogout={onLogout}><FavoriteSpots onNavigate={navigate} /></Layout>;
     if (route === '/profile') return <Layout onNavigate={navigate} currentPath={route} isAuthenticated={isAuthenticated} onLogout={onLogout}><UserProfile /></Layout>;
     if (route === '/settings') return <Layout onNavigate={navigate} currentPath={route} isAuthenticated={isAuthenticated} onLogout={onLogout}><Settings /></Layout>;
-    
+
+    // 法務・情報ページ
+    if (route === '/terms') return <Layout onNavigate={navigate} currentPath={route} isAuthenticated={isAuthenticated} onLogout={onLogout}><TermsOfService onNavigate={navigate} /></Layout>;
+    if (route === '/privacy') return <Layout onNavigate={navigate} currentPath={route} isAuthenticated={isAuthenticated} onLogout={onLogout}><PrivacyPolicy onNavigate={navigate} /></Layout>;
+    if (route === '/legal') return <Layout onNavigate={navigate} currentPath={route} isAuthenticated={isAuthenticated} onLogout={onLogout}><CommercialTransactionAct onNavigate={navigate} /></Layout>;
+    if (route === '/contact') return <Layout onNavigate={navigate} currentPath={route} isAuthenticated={isAuthenticated} onLogout={onLogout}><Contact onNavigate={navigate} /></Layout>;
+
     // Route to Plan Creator
     if (route === '/create') return <Layout onNavigate={navigate} currentPath={route} isAuthenticated={isAuthenticated} onLogout={onLogout}><CreatePlan onNavigate={navigate} /></Layout>;
     
@@ -135,11 +146,13 @@ const AppContent: React.FC = () => {
 // Appコンポーネント（AuthProviderとToastProviderでラップ）
 const App: React.FC = () => {
   return (
-    <AuthProvider>
-      <ToastProvider>
-        <AppContent />
-      </ToastProvider>
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <ToastProvider>
+          <AppContent />
+        </ToastProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 };
 

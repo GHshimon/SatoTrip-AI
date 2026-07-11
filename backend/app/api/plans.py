@@ -909,11 +909,13 @@ async def generate_ai_plan(
             {"destination": request.destination, "days": request.days}
         )
     
-    # 5. 使用量を記録
-    record_plan_generation(db, current_user.id)
-    
-    # データベースに保存
+    # 5. データベースに保存
     plan = create_plan(db, current_user.id, plan_data)
+
+    # 6. 使用量を記録（プラン保存が成功した後にのみ加算する。
+    #    保存前に記録すると、create_plan が失敗しても回数だけ消費されてしまう）
+    record_plan_generation(db, current_user.id)
+
     return plan
 
 
@@ -1048,7 +1050,13 @@ async def update_plan_endpoint(
         else:
             # PlanSpotUpdateのリストの場合（PlanDetailから送られてくる場合）
             # PlanSpotUpdateのリストを辞書に変換（IDをキーに）
-            spot_updates = {spot_update["id"]: spot_update for spot_update in incoming_spots}
+            # id を持たない要素はどの既存スポットにも対応しないためスキップする
+            # （id 必須を前提に spot_update["id"] とすると KeyError で500になる）
+            spot_updates = {
+                spot_update["id"]: spot_update
+                for spot_update in incoming_spots
+                if isinstance(spot_update, dict) and spot_update.get("id")
+            }
             
             # 既存のspotsを更新
             updated_spots = []

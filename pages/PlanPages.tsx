@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Plan, PlanSpot, PlanRequest, Spot, HotelCategory, HotelSearchRequest, HotelSearchResult } from '../types';
-import { plans, spots } from '../mockData';
+import { plans } from '../mockData';
 import { AppConfig } from '../config';
 import * as planApi from '../src/api/plans';
 import * as hotelApi from '../src/api/hotels';
@@ -240,7 +240,7 @@ const SortableSpotItem: React.FC<SortableSpotItemProps> = ({
             <p className="text-text-muted text-sm mb-2 line-clamp-2">{spot.spot.description}</p>
             {/* SNS Tag Display */}
             <div className="flex gap-2 flex-wrap">
-              {spot.spot.tags && spot.spot.tags.length > 0 ? (
+              {Array.isArray(spot.spot.tags) && spot.spot.tags.length > 0 ? (
                 spot.spot.tags.map((tag, i) => {
                   // タグがオブジェクトの場合はvalueまたはnormalizedを使用、文字列の場合はそのまま使用
                   const tagText = typeof tag === 'string' ? tag : (tag?.value || tag?.normalized || String(tag));
@@ -659,7 +659,7 @@ const LeafletMap: React.FC<{
     return () => {
       isMounted = false;
     };
-  }, [planSpots, selectedDay, areaName]);
+  }, [planSpots, selectedDay, areaName, visibleDays]);
 
   return <div ref={mapRef} className="w-full h-full rounded-2xl min-h-[400px] z-0" />;
 };
@@ -684,15 +684,29 @@ export const CreatePlan: React.FC<{ onNavigate: (path: string) => void }> = ({ o
   // Check for pending spots passed from Favorites page
   useEffect(() => {
     const stored = localStorage.getItem(AppConfig.STORAGE_KEYS.PENDING_SPOTS);
-    if (stored) {
-      const ids = JSON.parse(stored);
-      const selected = spots.filter(s => ids.includes(s.id));
-      setPendingSpots(selected);
+    if (!stored) return;
 
-      if (selected.length > 0) {
-        // Pre-fill destination from the first selected spot's area
-        setRequest(prev => ({ ...prev, destination: selected[0].area }));
+    // 保存側（FeaturePages）から渡されたスポットオブジェクトをそのまま使う。
+    // mockData との突き合わせは行わず、実APIのスポットでも反映されるようにする。
+    let selected: Spot[] = [];
+    try {
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed)) {
+        // 壊れた/想定外の要素を除外し、最低限 id を持つオブジェクトのみ採用
+        selected = parsed.filter(
+          (s): s is Spot => !!s && typeof s === 'object' && typeof s.id === 'string'
+        );
       }
+    } catch (e) {
+      console.error('Failed to parse pending spots from storage', e);
+      selected = [];
+    }
+
+    setPendingSpots(selected);
+
+    if (selected.length > 0) {
+      // Pre-fill destination from the first selected spot's area
+      setRequest(prev => ({ ...prev, destination: selected[0].area }));
     }
   }, []);
 
@@ -880,7 +894,7 @@ export const CreatePlan: React.FC<{ onNavigate: (path: string) => void }> = ({ o
                   <div className="flex items-center gap-4">
                     <button onClick={() => setRequest({ ...request, days: Math.max(1, request.days - 1) })} className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 font-bold text-xl">-</button>
                     <span className="text-2xl font-black w-20 text-center">{request.days}日間</span>
-                    <button onClick={() => setRequest({ ...request, days: Math.min(14, request.days + 1) })} className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 font-bold text-xl">+</button>
+                    <button onClick={() => setRequest({ ...request, days: Math.min(7, request.days + 1) })} className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center hover:bg-gray-200 font-bold text-xl">+</button>
                   </div>
                 </div>
 
@@ -1110,16 +1124,10 @@ export const PlanDetail: React.FC<{ planId: string; onNavigate: (path: string) =
           m = 'public';
         }
         initial[s.id] = m;
-        // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/0154fa29-b553-4de4-8ba1-d0609672b9f3',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'PlanPages.tsx:1153',message:'transportModes init',data:{spotId:s.id,transportMode:s.transportMode,mappedMode:m},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-        // #endregion
       } else {
         initial[s.id] = 'public';
       }
     });
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/0154fa29-b553-4de4-8ba1-d0609672b9f3',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'PlanPages.tsx:1158',message:'transportModes set',data:{initialModes:Object.keys(initial).length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion
     setTransportModes(initial);
   }, [plan]);
 
@@ -1259,15 +1267,9 @@ export const PlanDetail: React.FC<{ planId: string; onNavigate: (path: string) =
   }
 
   const handleModeChange = (id: string, mode: 'public' | 'car' | 'walk') => {
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/0154fa29-b553-4de4-8ba1-d0609672b9f3',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'PlanPages.tsx:1302',message:'handleModeChange',data:{id,mode,currentValue:transportModes[id]},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-    // #endregion
     // transportModesのみ更新（localPlanSpotsのtransportModeは更新しない - 元の値を保持）
     setTransportModes(prev => {
       const updated = { ...prev, [id]: mode };
-      // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/0154fa29-b553-4de4-8ba1-d0609672b9f3',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'PlanPages.tsx:1304',message:'transportModes updated',data:{id,mode,updatedValue:updated[id]},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-      // #endregion
       return updated;
     });
   };
@@ -1681,7 +1683,7 @@ export const PlanDetail: React.FC<{ planId: string; onNavigate: (path: string) =
                   />
                 </div>
               </div>
-              {(checkInDate !== plan.checkInDate || checkOutDate !== plan.checkOutDate) && (
+              {((checkInDate || '') !== (plan.checkInDate || '') || (checkOutDate || '') !== (plan.checkOutDate || '')) && (
                 <button
                   onClick={async () => {
                     if (checkInDate && checkOutDate && checkInDate >= checkOutDate) {
@@ -1850,7 +1852,7 @@ export const PlanDetail: React.FC<{ planId: string; onNavigate: (path: string) =
                       <p className="text-text-muted text-sm mb-2 line-clamp-2">{pSpot.spot.description}</p>
                       {/* SNS Tag Display */}
                       <div className="flex gap-2 flex-wrap">
-                        {pSpot.spot.tags && pSpot.spot.tags.length > 0 ? (
+                        {Array.isArray(pSpot.spot.tags) && pSpot.spot.tags.length > 0 ? (
                           pSpot.spot.tags.map((tag, i) => {
                             // タグがオブジェクトの場合はvalueまたはnormalizedを使用、文字列の場合はそのまま使用
                             const tagText = typeof tag === 'string' ? tag : (tag?.value || tag?.normalized || String(tag));
@@ -1876,9 +1878,6 @@ export const PlanDetail: React.FC<{ planId: string; onNavigate: (path: string) =
                     <TransportLine
                       mode={(() => {
                         const modeValue = transportModes[pSpot.id] || 'public';
-                        // #region agent log
-                        fetch('http://127.0.0.1:7243/ingest/0154fa29-b553-4de4-8ba1-d0609672b9f3',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'PlanPages.tsx:1968',message:'TransportLine mode prop',data:{spotId:pSpot.id,transportModesValue:transportModes[pSpot.id],modeValue,transportMode:pSpot.transportMode},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-                        // #endregion
                         return modeValue;
                       })()}
                       duration={(() => {
@@ -1912,7 +1911,16 @@ export const PlanDetail: React.FC<{ planId: string; onNavigate: (path: string) =
             <button
               onClick={() => {
                 const baseUrl = "https://www.google.com/maps/dir/";
-                const destinations = currentDaySpots.map(s => s.spot.name).join("/");
+                const destinations = currentDaySpots
+                  .map(s => {
+                    const loc = s.spot.location;
+                    // 座標があれば精度の高い緯度,経度を使用。無ければ名前をエンコード
+                    if (loc && typeof loc.lat === 'number' && typeof loc.lng === 'number') {
+                      return `${loc.lat},${loc.lng}`;
+                    }
+                    return encodeURIComponent(s.spot.name);
+                  })
+                  .join("/");
                 window.open(`${baseUrl}${destinations}`, '_blank');
               }}
               className="flex items-center gap-2 bg-white border border-gray-300 px-6 py-3 rounded-full font-bold hover:bg-gray-50 transition-colors shadow-sm"
@@ -2429,7 +2437,7 @@ export const PlanEditor: React.FC<{ planId: string; onNavigate: (path: string) =
           <div className="bg-white rounded-xl p-6 shadow-sm">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold">1日目: ルート編集</h2>
-              <button className="text-text-muted hover:text-text-light"><span className="material-symbols-outlined">more_vert</span></button>
+              {/* 以前ここに機能未実装の「⋮」ボタンがあったが、開くメニューが存在せず無反応だったため削除（正直化） */}
             </div>
 
             <div className="space-y-4">
@@ -2467,11 +2475,27 @@ export const PlanEditor: React.FC<{ planId: string; onNavigate: (path: string) =
                       </div>
                     </div>
                   </div>
-                  {index < localPlanSpots.length - 1 && (
-                    <div className="flex justify-center text-sm text-text-muted font-medium py-2">
-                      <span className="material-symbols-outlined mr-1 text-base">directions_walk</span> 徒歩15分
-                    </div>
-                  )}
+                  {index < localPlanSpots.length - 1 && (() => {
+                    // 固定の「徒歩15分」表示ではなく、各スポットが保持する実際の移動手段・所要時間を表示（正直化）
+                    // transportMode/transportDuration は「このスポットから次のスポットへの移動」を表す
+                    const modeInfo: Record<string, { icon: string; label: string }> = {
+                      walk: { icon: 'directions_walk', label: '徒歩' },
+                      train: { icon: 'train', label: '電車' },
+                      bus: { icon: 'directions_bus', label: 'バス' },
+                      car: { icon: 'directions_car', label: '車' },
+                    };
+                    const info = item.transportMode ? modeInfo[item.transportMode] : undefined;
+                    const duration = item.transportDuration;
+                    // 実データが無い場合は誤解を招く固定値を出さず、移動アイコンのみを表示
+                    return (
+                      <div className="flex justify-center text-sm text-text-muted font-medium py-2">
+                        <span className="material-symbols-outlined mr-1 text-base">{info?.icon || 'more_vert'}</span>
+                        {info && duration != null
+                          ? `${info.label}${duration}分`
+                          : '移動'}
+                      </div>
+                    );
+                  })()}
                 </React.Fragment>
               ))}
 

@@ -69,7 +69,8 @@ export interface PlanRouteResponse {
  * AIプラン生成
  */
 export async function generatePlan(request: PlanGenerateRequest): Promise<Plan> {
-  const response = await apiClient.post<any>('/api/plans/generate-plan', request);
+  // AI生成は Gemini 呼び出し＋ルート計算で時間がかかるため、長めのタイムアウト（120秒）にする
+  const response = await apiClient.post<any>('/api/plans/generate-plan', request, 120000);
   // バックエンドのレスポンスをフロントエンドのPlan型に変換
   return transformPlanResponse(response);
 }
