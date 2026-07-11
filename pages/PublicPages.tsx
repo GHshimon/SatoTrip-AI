@@ -577,6 +577,7 @@ export const UserProfile: React.FC = () => {
 
 export const Settings: React.FC = () => {
   const { showSuccess, showError, showInfo } = useToast();
+  const { user: authUser, logout } = useAuth();
 
   // 設定値（getPreferences で取得）
   const [preferences, setPreferences] = useState<userApi.UserPreferences | null>(null);
@@ -619,6 +620,26 @@ export const Settings: React.FC = () => {
     } catch (err) {
       showError(getErrorMessage(err) || '決済ページの作成に失敗しました');
       setCheckoutPlan(null);
+    }
+  };
+
+  // 退会（アカウント削除）
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDeleteAccount = async () => {
+    if (isDeleting) return;
+    setIsDeleting(true);
+    try {
+      await userApi.deleteAccount(deleteConfirm.trim());
+      showSuccess('退会が完了しました。ご利用ありがとうございました');
+      // アカウントは消えているため、ローカルの認証状態を破棄してトップへ
+      try { await logout(); } catch { /* トークン失効済みでも続行 */ }
+      window.location.hash = '#/';
+    } catch (err) {
+      showError(getErrorMessage(err) || '退会処理に失敗しました');
+      setIsDeleting(false);
     }
   };
 
@@ -955,6 +976,69 @@ export const Settings: React.FC = () => {
           <span className="material-symbols-outlined text-gray-300 group-hover:text-primary">chevron_right</span>
         </button>
       </div>
+
+      {/* 退会（アカウント削除） */}
+      <div className="bg-white rounded-2xl overflow-hidden shadow-sm border border-red-100 mt-6">
+        <div className="p-6 flex items-center gap-4">
+          <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center text-red-500">
+            <span className="material-symbols-outlined">person_remove</span>
+          </div>
+          <div className="flex-1">
+            <h3 className="font-bold text-text-light">退会（アカウント削除）</h3>
+            <p className="text-sm text-text-muted">アカウントと全データを完全に削除します。この操作は取り消せません</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => { setDeleteConfirm(''); setShowDeleteModal(true); }}
+            className="text-red-500 border border-red-200 px-4 py-2 rounded-full font-bold text-sm hover:bg-red-50 transition-colors"
+          >
+            退会する
+          </button>
+        </div>
+      </div>
+
+      {/* 退会確認モーダル */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4" role="dialog" aria-modal="true">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
+            <h3 className="text-lg font-black text-text-light mb-3">本当に退会しますか？</h3>
+            <ul className="text-sm text-text-muted space-y-1 mb-4 list-disc pl-5">
+              <li>作成した旅行プラン・お気に入り・設定など<b>すべてのデータが完全に削除</b>されます</li>
+              <li>削除したデータは<b>復元できません</b></li>
+              <li>有料プランをご契約中の場合、サブスクリプションは自動で解約されます（日割り返金はありません）</li>
+            </ul>
+            <label className="block text-text-muted text-sm font-bold mb-1">
+              確認のため、ユーザー名「{authUser?.username || ''}」を入力してください
+            </label>
+            <input
+              type="text"
+              value={deleteConfirm}
+              onChange={(e) => setDeleteConfirm(e.target.value)}
+              autoComplete="off"
+              placeholder="ユーザー名"
+              className="w-full p-3 rounded-xl bg-gray-50 border border-gray-200 text-text-light font-medium focus:bg-white focus:ring-2 focus:ring-red-400"
+            />
+            <div className="mt-5 flex gap-3 justify-end">
+              <button
+                type="button"
+                onClick={() => setShowDeleteModal(false)}
+                disabled={isDeleting}
+                className="px-5 py-2.5 rounded-full font-bold text-sm text-text-muted hover:bg-gray-100 transition-colors disabled:opacity-50"
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteAccount}
+                disabled={isDeleting || (authUser?.username ? deleteConfirm.trim() !== authUser.username : deleteConfirm.trim() === '')}
+                className="bg-red-500 text-white px-5 py-2.5 rounded-full font-bold text-sm hover:bg-red-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {isDeleting ? '削除中...' : '完全に削除して退会'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

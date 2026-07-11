@@ -57,3 +57,8 @@ class PasswordChangeRequest(BaseModel):
     current_password: str
     new_password: str = Field(min_length=8, description="新しいパスワード（8文字以上）")
 
+
+class AccountDeleteRequest(BaseModel):
+    """退会（アカウント削除）確認スキーマ"""
+    confirm: str = Field(description="確認のため自分のユーザー名を正確に入力する")
+

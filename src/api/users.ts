@@ -78,9 +78,18 @@ export async function updateUser(userData: UserUpdateRequest): Promise<User> {
 function transformUserResponse(data: any): User {
   return {
     id: data.id,
+    username: data.username,
     name: data.name,
     avatar: data.avatar || '',
     role: data.role || 'user',
   };
+}
+
+/**
+ * 退会（アカウント削除）。誤操作防止のため、confirm にユーザー名を正確に渡す。
+ * 成功するとアカウントと関連データ（プラン・お気に入り・契約等）が完全に削除される。
+ */
+export async function deleteAccount(confirm: string): Promise<void> {
+  await apiClient.delete('/api/users/me', { confirm });
 }
 

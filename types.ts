@@ -1,6 +1,8 @@
 
 export interface User {
   id: string;
+  /** ログインID（退会時の確認入力などに使用。モックデータには無い場合がある） */
+  username?: string;
   name: string;
   avatar: string;
   role: 'user' | 'admin';

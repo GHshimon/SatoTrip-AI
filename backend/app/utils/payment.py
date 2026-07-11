@@ -278,6 +278,21 @@ def handle_payment_failed(event, db) -> bool:
     return True
 
 
+def cancel_stripe_subscription(subscription_id: str) -> bool:
+    """
+    Stripe のサブスクリプションを即時キャンセルする（退会時などに使用）。
+    失敗してもログのみ残して False を返す（呼び出し側の処理は継続する）。
+    """
+    if not STRIPE_AVAILABLE:
+        return False
+    try:
+        stripe.Subscription.delete(subscription_id)
+        return True
+    except Exception as e:
+        logger.warning("Stripe サブスクリプション解約エラー: %s", str(e))
+        return False
+
+
 def create_billing_portal_session(customer_id: str, return_url: str) -> Optional[str]:
     """Stripe カスタマーポータルのセッションを作成し、URLを返す。"""
     if not STRIPE_AVAILABLE:
