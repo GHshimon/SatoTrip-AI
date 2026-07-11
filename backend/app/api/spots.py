@@ -1,7 +1,9 @@
 """
 スポット管理APIエンドポイント
 """
-from fastapi import APIRouter, Depends, HTTPException, status, Query, BackgroundTasks
+import asyncio
+
+from fastapi import APIRouter, Depends, HTTPException, status, Query, BackgroundTasks, Response
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from app.utils.database import get_db
@@ -45,6 +47,41 @@ async def list_spots(
     """スポット一覧取得（フィルタリング対応）"""
     spots = get_spots(db, area, category, keyword, skip, limit)
     return spots
+
+
+@router.get("/photo")
+async def get_spot_photo(
+    ref: str = Query(..., description="Places の photo resource name（places/<id>/photos/<token>）")
+):
+    """Google Places 写真プロキシ
+
+    API キーをクライアントへ露出させないため、サーバ側でキーを付与して
+    Places Photo API から画像を取得し、そのまま返す。
+    ※ /{spot_id} より先に定義すること（パスマッチ順の都合）
+    """
+    from app.services.places_service import fetch_photo_media, is_valid_photo_resource_name
+
+    # photo resource name 形式のみ許可（SSRF対策）
+    if not is_valid_photo_resource_name(ref):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="不正な写真参照です"
+        )
+
+    # requests はブロッキングなのでスレッドへ逃がす
+    result = await asyncio.to_thread(fetch_photo_media, ref)
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="写真が見つかりません"
+        )
+
+    content, content_type = result
+    return Response(
+        content=content,
+        media_type=content_type,
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
 
 
 @router.get("/{spot_id}", response_model=SpotResponse)

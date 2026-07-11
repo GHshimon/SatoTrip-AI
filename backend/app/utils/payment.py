@@ -105,6 +105,8 @@ def handle_checkout_completed(event, db) -> bool:
     """
     checkout.session.completed イベントを処理してプランを昇格する。
     metadata（サーバー側で設定した値）のみを信頼する。
+    あわせて Stripe の customer / subscription ID を保存し、
+    以降の継続課金イベント（invoice.paid 等）との突合を可能にする。
     """
     session = event["data"]["object"]
     if session.get("payment_status") != "paid":
@@ -116,6 +118,176 @@ def handle_checkout_completed(event, db) -> bool:
         logger.warning("Webhook: 不正な metadata（昇格スキップ）")
         return False
     from app.utils.subscription import upgrade_plan
-    upgrade_plan(db, user_id, plan_name, months=1)
+    upgrade_plan(
+        db, user_id, plan_name, months=1,
+        stripe_customer_id=session.get("customer"),
+        stripe_subscription_id=session.get("subscription"),
+    )
     logger.info("Webhook: プランを昇格しました user=%s plan=%s", user_id, plan_name)
     return True
+
+
+def _extract_invoice_subscription_id(invoice: Dict[str, Any]) -> Optional[str]:
+    """
+    invoice イベントから Stripe subscription ID を取り出す。
+    APIバージョンにより位置が異なるため複数箇所を順に確認する。
+    """
+    # 旧来のトップレベル（大半のAPIバージョン）
+    sub = invoice.get("subscription")
+    if isinstance(sub, str) and sub:
+        return sub
+    if isinstance(sub, dict) and sub.get("id"):
+        return sub["id"]
+    # 2025年以降のAPIバージョン: parent.subscription_details.subscription
+    parent = invoice.get("parent") or {}
+    details = parent.get("subscription_details") or {}
+    sub = details.get("subscription")
+    if isinstance(sub, str) and sub:
+        return sub
+    # lines 側の parent からも辿れる場合がある
+    for line in (invoice.get("lines") or {}).get("data", []):
+        line_parent = line.get("parent") or {}
+        item_details = line_parent.get("subscription_item_details") or {}
+        sub = item_details.get("subscription")
+        if isinstance(sub, str) and sub:
+            return sub
+    return None
+
+
+def _extract_invoice_period_end(invoice: Dict[str, Any], subscription_id: Optional[str]) -> Optional[int]:
+    """
+    請求対象期間の終了時刻（unixtime）を取り出す。
+    まず invoice の lines の period.end（最大値）を見て、
+    取れなければ Stripe API で subscription の current_period_end を取得する。
+    """
+    period_ends = []
+    for line in (invoice.get("lines") or {}).get("data", []):
+        period = line.get("period") or {}
+        end = period.get("end")
+        if isinstance(end, (int, float)) and end > 0:
+            period_ends.append(int(end))
+    if period_ends:
+        return max(period_ends)
+    # フォールバック: subscription から current_period_end を取得
+    if STRIPE_AVAILABLE and subscription_id:
+        try:
+            sub = stripe.Subscription.retrieve(subscription_id)
+            end = sub.get("current_period_end")
+            if isinstance(end, (int, float)) and end > 0:
+                return int(end)
+        except Exception as e:
+            logger.warning("Stripe Subscription 取得エラー: %s", str(e))
+    return None
+
+
+def handle_invoice_paid(event, db) -> bool:
+    """
+    invoice.paid イベントを処理し、継続課金の入金で有効期限を延長する。
+    これが無いと2ヶ月目以降「課金あり・無料プラン降格」が発生する。
+    """
+    from datetime import datetime, timedelta
+    from app.utils.subscription import get_subscription_by_stripe_ids, extend_subscription
+
+    invoice = event["data"]["object"]
+    subscription_id = _extract_invoice_subscription_id(invoice)
+    customer_id = invoice.get("customer")
+    if isinstance(customer_id, dict):
+        customer_id = customer_id.get("id")
+
+    subscription = get_subscription_by_stripe_ids(
+        db,
+        stripe_subscription_id=subscription_id,
+        stripe_customer_id=customer_id,
+    )
+    if not subscription:
+        # 初回請求は checkout.session.completed 側で昇格・保存されるため、
+        # ここで見つからないのは順序逆転か旧データ。スキップ（200を返す）。
+        logger.warning(
+            "Webhook: invoice.paid の対象ユーザーが見つかりません subscription=%s customer=%s",
+            subscription_id, customer_id,
+        )
+        return False
+
+    period_end_ts = _extract_invoice_period_end(invoice, subscription_id)
+    if period_end_ts:
+        expires_at = datetime.fromtimestamp(period_end_ts)
+    else:
+        # 期間が取れない場合の安全側フォールバック（1ヶ月延長）
+        expires_at = datetime.now() + timedelta(days=30)
+
+    # subscription_id が未保存だった場合はここで補完しておく
+    if subscription_id and not subscription.stripe_subscription_id:
+        subscription.stripe_subscription_id = subscription_id
+    extend_subscription(db, subscription, expires_at)
+    logger.info(
+        "Webhook: 入金を確認し期限を延長しました user=%s plan=%s expires_at=%s",
+        subscription.user_id, subscription.plan_name, expires_at.isoformat(),
+    )
+    return True
+
+
+def handle_subscription_deleted(event, db) -> bool:
+    """customer.subscription.deleted イベントを処理し、free に降格する。"""
+    from app.utils.subscription import get_subscription_by_stripe_ids, downgrade_to_free
+
+    stripe_sub = event["data"]["object"]
+    subscription_id = stripe_sub.get("id")
+    customer_id = stripe_sub.get("customer")
+    if isinstance(customer_id, dict):
+        customer_id = customer_id.get("id")
+
+    subscription = get_subscription_by_stripe_ids(
+        db,
+        stripe_subscription_id=subscription_id,
+        stripe_customer_id=customer_id,
+    )
+    if not subscription:
+        logger.warning(
+            "Webhook: subscription.deleted の対象ユーザーが見つかりません subscription=%s",
+            subscription_id,
+        )
+        return False
+    downgrade_to_free(db, subscription.user_id)
+    logger.info("Webhook: 解約により free に降格しました user=%s", subscription.user_id)
+    return True
+
+
+def handle_payment_failed(event, db) -> bool:
+    """invoice.payment_failed イベントを処理し、free に降格する。"""
+    from app.utils.subscription import get_subscription_by_stripe_ids, downgrade_to_free
+
+    invoice = event["data"]["object"]
+    subscription_id = _extract_invoice_subscription_id(invoice)
+    customer_id = invoice.get("customer")
+    if isinstance(customer_id, dict):
+        customer_id = customer_id.get("id")
+
+    subscription = get_subscription_by_stripe_ids(
+        db,
+        stripe_subscription_id=subscription_id,
+        stripe_customer_id=customer_id,
+    )
+    if not subscription:
+        logger.warning(
+            "Webhook: payment_failed の対象ユーザーが見つかりません subscription=%s customer=%s",
+            subscription_id, customer_id,
+        )
+        return False
+    downgrade_to_free(db, subscription.user_id)
+    logger.info("Webhook: 支払失敗により free に降格しました user=%s", subscription.user_id)
+    return True
+
+
+def create_billing_portal_session(customer_id: str, return_url: str) -> Optional[str]:
+    """Stripe カスタマーポータルのセッションを作成し、URLを返す。"""
+    if not STRIPE_AVAILABLE:
+        return None
+    try:
+        session = stripe.billing_portal.Session.create(
+            customer=customer_id,
+            return_url=return_url,
+        )
+        return session.url
+    except Exception as e:
+        logger.error("Stripe カスタマーポータル作成エラー: %s", str(e))
+        return None

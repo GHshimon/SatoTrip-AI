@@ -19,10 +19,15 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # FastAPIアプリケーション作成
+# 本番では API ドキュメント（/docs, /redoc, /openapi.json）を無効化する
+_is_production = getattr(settings, "ENVIRONMENT", "development") == "production"
 app = FastAPI(
     title="SatoTrip API",
     description="SatoTrip旅行プラン生成API",
-    version="1.0.0"
+    version="1.0.0",
+    docs_url=None if _is_production else "/docs",
+    redoc_url=None if _is_production else "/redoc",
+    openapi_url=None if _is_production else "/openapi.json",
 )
 
 # CORS設定

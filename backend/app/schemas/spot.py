@@ -86,7 +86,14 @@ class SpotResponse(SpotBase):
     id: str
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
-    
+
+    @field_validator('image', mode='after')
+    @classmethod
+    def sanitize_image_url(cls, v: Optional[str]) -> Optional[str]:
+        """旧データのAPIキー入りPlaces画像URLをプロキシURL（/api/spots/photo?ref=...）に変換"""
+        from app.services.places_service import to_public_image_url
+        return to_public_image_url(v)
+
     @field_validator('tags', mode='after')
     @classmethod
     def convert_tags_for_response(cls, v: Any) -> Optional[List[Dict[str, Any]]]:
