@@ -61,6 +61,14 @@ export interface RouteInfo {
   source: string;
 }
 
+export interface PlanUsage {
+  can_generate: boolean;
+  message: string;
+  remaining: number | null;
+  plan_name: string;
+  plan_features?: Record<string, any>;
+}
+
 export interface PlanRouteResponse {
   plan_id: string;
   day: number | null;
@@ -114,6 +122,13 @@ export async function updatePlan(id: string, planData: PlanUpdateRequest): Promi
  */
 export async function deletePlan(id: string): Promise<void> {
   await apiClient.delete(`/api/plans/${id}`);
+}
+
+/**
+ * プラン生成の使用量と現在の契約プラン名を取得
+ */
+export async function getPlanUsage(): Promise<PlanUsage> {
+  return apiClient.get<PlanUsage>('/api/plans/usage');
 }
 
 /**

@@ -22,3 +22,15 @@ export async function getPaymentConfig(): Promise<PaymentConfig> {
 export async function createCheckout(planName: string): Promise<CheckoutSession> {
   return apiClient.post<CheckoutSession>('/api/payments/checkout', { plan_name: planName });
 }
+
+export interface BillingPortalSession {
+  url: string;
+}
+
+/**
+ * Stripe カスタマーポータルのURLを取得する。
+ * 解約・支払方法の変更・請求履歴の確認はポータル側で行う（有料プラン契約者のみ）。
+ */
+export async function createBillingPortal(): Promise<BillingPortalSession> {
+  return apiClient.post<BillingPortalSession>('/api/payments/portal', {});
+}

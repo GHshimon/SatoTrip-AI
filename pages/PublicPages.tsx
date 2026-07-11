@@ -5,6 +5,7 @@ import { useToast } from '../components/Toast';
 import * as userApi from '../src/api/users';
 import * as authApi from '../src/api/auth';
 import * as paymentApi from '../src/api/payments';
+import * as plansApi from '../src/api/plans';
 import { getErrorMessage } from '../src/utils/errorHandler';
 
 export const Home: React.FC<{ onNavigate: (path: string) => void }> = ({ onNavigate }) => {
@@ -593,12 +594,19 @@ export const Settings: React.FC = () => {
   // 決済（Stripe）
   const [paymentConfigured, setPaymentConfigured] = useState(false);
   const [checkoutPlan, setCheckoutPlan] = useState<string | null>(null);
+  // 現在の契約プラン名（'free' | 'basic' | 'premium'。取得失敗時は null のままアップグレード表示）
+  const [currentPlan, setCurrentPlan] = useState<string | null>(null);
+  const [isOpeningPortal, setIsOpeningPortal] = useState(false);
 
   useEffect(() => {
     // 決済が有効かどうかを取得（未設定なら「準備中」表示のまま）
     paymentApi.getPaymentConfig()
       .then((cfg) => setPaymentConfigured(cfg.configured))
       .catch(() => setPaymentConfigured(false));
+    // 契約中プランの取得（解約ボタンの表示判定に使用）
+    plansApi.getPlanUsage()
+      .then((usage) => setCurrentPlan(usage.plan_name))
+      .catch(() => setCurrentPlan(null));
   }, []);
 
   const handleUpgrade = async (planName: string) => {
@@ -611,6 +619,19 @@ export const Settings: React.FC = () => {
     } catch (err) {
       showError(getErrorMessage(err) || '決済ページの作成に失敗しました');
       setCheckoutPlan(null);
+    }
+  };
+
+  // Stripe カスタマーポータルを開く（解約・支払方法の変更・請求履歴）
+  const handleManageSubscription = async () => {
+    if (isOpeningPortal) return;
+    setIsOpeningPortal(true);
+    try {
+      const session = await paymentApi.createBillingPortal();
+      window.location.href = session.url;
+    } catch (err) {
+      showError(getErrorMessage(err) || '契約管理ページを開けませんでした');
+      setIsOpeningPortal(false);
     }
   };
 
@@ -845,41 +866,71 @@ export const Settings: React.FC = () => {
         </form>
       </div>
 
-      {/* お支払い・プランのアップグレード（Stripe） */}
+      {/* お支払い・ご契約（Stripe: アップグレード／契約中は解約・支払方法変更） */}
       <div className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100 mb-6">
         <div className="p-6 flex items-center gap-4 border-b border-gray-100">
           <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-text-muted">
             <span className="material-symbols-outlined">credit_card</span>
           </div>
           <div className="flex-1">
-            <h3 className="font-bold text-text-light">プランのアップグレード</h3>
-            <p className="text-sm text-text-muted">より多くのプラン生成・機能を利用できます</p>
+            <h3 className="font-bold text-text-light">お支払い・ご契約</h3>
+            <p className="text-sm text-text-muted">
+              {currentPlan === 'basic' || currentPlan === 'premium'
+                ? 'ご契約内容の確認・変更・解約ができます'
+                : 'より多くのプラン生成・機能を利用できます'}
+            </p>
           </div>
           {!paymentConfigured && (
             <span className="text-xs bg-gray-100 text-text-muted px-2 py-1 rounded-full font-bold">準備中</span>
           )}
         </div>
         {paymentConfigured ? (
-          <div className="p-6 grid gap-3 sm:grid-cols-2">
-            {[
-              { plan: 'basic', name: 'ベーシック', price: '¥980/月', desc: '月50プラン・広告なし・PDF出力' },
-              { plan: 'premium', name: 'プレミアム', price: '¥2,980/月', desc: '無制限・優先サポート・高度な最適化' },
-            ].map((p) => (
-              <div key={p.plan} className="border border-gray-200 rounded-xl p-4 flex flex-col">
-                <div className="font-bold text-text-light">{p.name}</div>
-                <div className="text-primary font-black text-lg">{p.price}</div>
-                <p className="text-xs text-text-muted flex-1 mt-1">{p.desc}</p>
-                <button
-                  type="button"
-                  onClick={() => handleUpgrade(p.plan)}
-                  disabled={checkoutPlan !== null}
-                  className="mt-3 bg-primary text-white py-2 rounded-full font-bold text-sm hover:opacity-90 transition-opacity disabled:opacity-50"
-                >
-                  {checkoutPlan === p.plan ? '処理中...' : 'アップグレード'}
-                </button>
+          currentPlan === 'basic' || currentPlan === 'premium' ? (
+            <div className="p-6">
+              <div className="flex items-center justify-between border border-gray-200 rounded-xl p-4">
+                <div>
+                  <p className="text-xs text-text-muted font-bold">現在のプラン</p>
+                  <p className="font-black text-lg text-text-light">
+                    {currentPlan === 'premium' ? 'プレミアム' : 'ベーシック'}
+                  </p>
+                </div>
+                <span className="text-xs bg-primary/10 text-primary px-3 py-1 rounded-full font-bold">契約中</span>
               </div>
-            ))}
-          </div>
+              <button
+                type="button"
+                onClick={handleManageSubscription}
+                disabled={isOpeningPortal}
+                className="mt-4 bg-primary text-white px-6 py-3 rounded-full font-bold shadow-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
+              >
+                {isOpeningPortal ? '開いています...' : '契約を管理（解約・お支払い方法の変更）'}
+              </button>
+              <p className="mt-3 text-xs text-text-muted">
+                解約・お支払い方法の変更・請求履歴の確認は、Stripeの安全な管理ページで行います。
+                解約後も現在の請求期間の末日まではご利用いただけます。
+              </p>
+            </div>
+          ) : (
+            <div className="p-6 grid gap-3 sm:grid-cols-2">
+              {[
+                { plan: 'basic', name: 'ベーシック', price: '¥980/月', desc: '月50プラン・広告なし・PDF出力' },
+                { plan: 'premium', name: 'プレミアム', price: '¥2,980/月', desc: '無制限・優先サポート・高度な最適化' },
+              ].map((p) => (
+                <div key={p.plan} className="border border-gray-200 rounded-xl p-4 flex flex-col">
+                  <div className="font-bold text-text-light">{p.name}</div>
+                  <div className="text-primary font-black text-lg">{p.price}</div>
+                  <p className="text-xs text-text-muted flex-1 mt-1">{p.desc}</p>
+                  <button
+                    type="button"
+                    onClick={() => handleUpgrade(p.plan)}
+                    disabled={checkoutPlan !== null}
+                    className="mt-3 bg-primary text-white py-2 rounded-full font-bold text-sm hover:opacity-90 transition-opacity disabled:opacity-50"
+                  >
+                    {checkoutPlan === p.plan ? '処理中...' : 'アップグレード'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )
         ) : (
           <div className="p-6 text-sm text-text-muted">
             オンライン決済は現在準備中です。ご利用可能になり次第、こちらからお申し込みいただけます。
