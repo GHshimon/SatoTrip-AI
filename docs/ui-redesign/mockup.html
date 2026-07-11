@@ -1,0 +1,582 @@
+<title>SatoTrip — 旅の同人誌 × 地形図</title>
+<style>
+/* ============================================================
+   SatoTrip Redesign Mock — "旅の同人誌 × 地形図"
+   Editorial / topographic direction. Single file, CSP-safe:
+   no external fonts, images, CDNs. Type = JP system stacks.
+   Signature: animated WebGL topographic-contour hero background.
+   ============================================================ */
+
+:root{
+  --paper:#FAF8F3;        /* 白練 */
+  --ink:#1C1F26;          /* 青みの墨 */
+  --ink-soft:#3d424e;
+  --line:#dcd6c9;
+  --line-strong:#c3bba9;
+  --ai:#2A4B7C;           /* 藍 — structure */
+  --shu:#B5493A;          /* 朱 — call to action */
+  --paper-2:#F2EEE3;
+  --paper-3:#EAE4D5;
+  /* 8 和色 categories: chip color / ink-on-paper text color */
+  --c-touring:#2166a6;   --c-touring-t:#1a4e7f;   /* 縹 ツーリング */
+  --c-cafe:#a86a1f;      --c-cafe-t:#7f4f14;      /* 琥珀 カフェ */
+  --c-sauna:#0f8196;     --c-sauna-t:#0b6072;     /* 浅葱 サウナ */
+  --c-photo:#b8447f;     --c-photo-t:#8c3361;     /* 躑躅 写真 */
+  --c-history:#a24328;   --c-history-t:#79301c;   /* 弁柄 歴史 */
+  --c-nature:#4f7c3a;    --c-nature-t:#3a5c2b;    /* 苔 自然 */
+  --c-food:#c69211;      --c-food-t:#8f6a0c;      /* 山吹 グルメ */
+  --c-art:#6a4f9e;       --c-art-t:#4f3a78;       /* 桔梗 アート */
+  --scrim:rgba(250,248,243,.72);
+
+  --serif:"Hiragino Mincho ProN","Yu Mincho","YuMincho","Noto Serif JP",serif;
+  --gothic:"Hiragino Kaku Gothic ProN","Yu Gothic","YuGothic","Noto Sans JP",system-ui,sans-serif;
+  --maxw:1180px;
+  --ease:cubic-bezier(.22,.61,.36,1);
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --paper:#14171E; --ink:#EDE7DA; --ink-soft:#b7b1a3; --line:#2a303b;
+    --line-strong:#3a424f; --ai:#7BA7D9; --shu:#E07A5F; --paper-2:#1b1f28;
+    --paper-3:#222834; --scrim:rgba(20,23,30,.66);
+    --c-touring-t:#7fb3e6; --c-cafe-t:#dba64e; --c-sauna-t:#4fc3d6;
+    --c-photo-t:#e58bbb;   --c-history-t:#e0876c; --c-nature-t:#8fc06e;
+    --c-food-t:#e6c05a;    --c-art-t:#b39ae0;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#14171E; --ink:#EDE7DA; --ink-soft:#b7b1a3; --line:#2a303b;
+  --line-strong:#3a424f; --ai:#7BA7D9; --shu:#E07A5F; --paper-2:#1b1f28;
+  --paper-3:#222834; --scrim:rgba(20,23,30,.66);
+  --c-touring-t:#7fb3e6; --c-cafe-t:#dba64e; --c-sauna-t:#4fc3d6;
+  --c-photo-t:#e58bbb;   --c-history-t:#e0876c; --c-nature-t:#8fc06e;
+  --c-food-t:#e6c05a;    --c-art-t:#b39ae0;
+}
+:root[data-theme="light"]{
+  --paper:#FAF8F3; --ink:#1C1F26; --ink-soft:#3d424e; --line:#dcd6c9;
+  --line-strong:#c3bba9; --ai:#2A4B7C; --shu:#B5493A; --paper-2:#F2EEE3;
+  --paper-3:#EAE4D5; --scrim:rgba(250,248,243,.72);
+  --c-touring-t:#1a4e7f; --c-cafe-t:#7f4f14; --c-sauna-t:#0b6072;
+  --c-photo-t:#8c3361;   --c-history-t:#79301c; --c-nature-t:#3a5c2b;
+  --c-food-t:#8f6a0c;    --c-art-t:#4f3a78;
+}
+
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0; background:var(--paper); color:var(--ink); font-family:var(--gothic);
+  font-feature-settings:"palt" 1; line-height:1.7; letter-spacing:.01em; overflow-x:hidden}
+h1,h2,h3{font-family:var(--serif); font-weight:600; line-height:1.28; text-wrap:balance; margin:0}
+p{margin:0}
+a{color:inherit; text-decoration:none}
+:focus-visible{outline:2px solid var(--shu); outline-offset:3px}
+
+.grain{position:fixed; inset:0; z-index:9; pointer-events:none; opacity:.05; mix-blend-mode:multiply; width:100%; height:100%}
+@media (prefers-color-scheme:dark){.grain{mix-blend-mode:screen; opacity:.045}}
+:root[data-theme="dark"] .grain{mix-blend-mode:screen; opacity:.045}
+:root[data-theme="light"] .grain{mix-blend-mode:multiply; opacity:.05}
+
+/* ---------- nav ---------- */
+.topbar{position:fixed; top:0; left:0; right:0; z-index:20; display:flex; align-items:center;
+  justify-content:space-between; padding:16px clamp(18px,4vw,44px);
+  background:linear-gradient(var(--paper),rgba(0,0,0,0)); transition:background .3s, border-color .3s}
+.topbar.solid{background:var(--paper); border-bottom:1px solid var(--line)}
+.brand{display:flex; align-items:baseline; gap:10px; font-family:var(--serif); font-size:21px; letter-spacing:.06em}
+.brand .dot{color:var(--shu)}
+.brand small{font-family:var(--gothic); font-size:10px; letter-spacing:.22em; color:var(--ink-soft); transform:translateY(-1px)}
+.nav{display:flex; align-items:center; gap:26px; font-size:13px; letter-spacing:.05em; color:var(--ink-soft)}
+.nav a{position:relative}
+.nav a.lnk::after{content:""; position:absolute; left:0; bottom:-5px; width:0; height:1px; background:var(--shu); transition:width .3s var(--ease)}
+.nav a.lnk:hover{color:var(--ink)} .nav a.lnk:hover::after{width:100%}
+.nav .cta{padding:8px 16px; border:1px solid var(--ink); border-radius:999px; color:var(--ink); letter-spacing:.08em; transition:.25s}
+.nav .cta:hover{background:var(--ink); color:var(--paper)}
+.theme-tgl{cursor:pointer; width:34px; height:34px; border:1px solid var(--line-strong); border-radius:50%; background:transparent; color:var(--ink); display:grid; place-items:center; font-size:14px}
+@media(max-width:760px){.nav .lnk{display:none}}
+
+/* ============================================================ HERO */
+.hero{position:relative; min-height:100svh; display:flex; flex-direction:column; justify-content:center; padding:120px clamp(18px,4vw,44px) 64px; overflow:hidden}
+#topo{position:absolute; inset:0; width:100%; height:100%; z-index:0; display:block}
+.hero::after{content:""; position:absolute; inset:0; z-index:1; pointer-events:none;
+  background:radial-gradient(120% 92% at 16% 42%, var(--scrim) 0%, rgba(0,0,0,0) 60%),
+             linear-gradient(to top, var(--paper) 2%, rgba(0,0,0,0) 24%)}
+.hero-inner{position:relative; z-index:2; max-width:var(--maxw); margin:0 auto; width:100%}
+.eyebrow{display:inline-flex; align-items:center; gap:12px; font-size:12px; letter-spacing:.24em; color:var(--ai); margin-bottom:26px}
+.eyebrow .ln{width:46px; height:1px; background:var(--ai); opacity:.6}
+.hero h1{font-size:clamp(38px,7.4vw,92px); letter-spacing:.02em}
+.hero h1 .em{color:var(--shu)}
+.hero h1 .line{display:block; overflow:hidden}
+.hero h1 .line > span{display:inline-block; transform:translateY(110%); transition:transform .9s var(--ease)}
+.hero.in h1 .line > span{transform:translateY(0)}
+.hero h1 .line:nth-child(2) > span{transition-delay:.12s}
+.hero .lede{max-width:44ch; margin-top:30px; font-size:clamp(15px,1.7vw,18px); color:var(--ink-soft); line-height:1.9}
+.hero .actions{display:flex; gap:16px; flex-wrap:wrap; margin-top:38px}
+.btn{font-family:var(--gothic); font-size:14px; letter-spacing:.06em; padding:14px 26px; border-radius:999px; cursor:pointer; border:1px solid transparent; transition:transform .25s var(--ease), box-shadow .25s var(--ease), background .25s, color .25s; display:inline-flex; align-items:center; gap:10px}
+.btn-primary{background:var(--shu); color:#fff; box-shadow:0 10px 30px -12px var(--shu)}
+.btn-primary:hover{transform:translateY(-2px); box-shadow:0 16px 36px -12px var(--shu)}
+.btn-ghost{border-color:var(--line-strong); color:var(--ink)}
+.btn-ghost:hover{border-color:var(--ink); background:var(--paper-2)}
+.hero .meta{position:absolute; z-index:2; bottom:30px; left:50%; transform:translateX(-50%); display:flex; gap:34px; font-size:11px; letter-spacing:.18em; color:var(--ink-soft); text-align:center}
+.hero .meta b{color:var(--ink); font-family:var(--serif); font-size:18px; letter-spacing:0; display:block}
+.hero .crest{position:absolute; right:clamp(20px,5vw,72px); bottom:120px; z-index:2; width:250px; height:250px; opacity:.95}
+.coord{position:absolute; z-index:2; font-size:10px; letter-spacing:.2em; color:var(--ink-soft); opacity:.7}
+.coord.tl{top:96px; left:clamp(18px,4vw,44px)} .coord.br{bottom:70px; right:clamp(18px,4vw,44px); text-align:right}
+@media(max-width:1100px){.hero .crest{opacity:.5; bottom:auto; top:150px; width:180px; height:180px}}
+@media(max-width:900px){.hero .crest,.coord.br{display:none} .hero .meta{gap:18px}}
+
+/* ============================================================ sections */
+section{position:relative}
+.wrap{max-width:var(--maxw); margin:0 auto; padding:clamp(72px,11vw,150px) clamp(18px,4vw,44px)}
+.sec-head{display:flex; align-items:flex-end; justify-content:space-between; gap:24px; margin-bottom:clamp(36px,5vw,64px); flex-wrap:wrap}
+.sec-num{font-size:12px; letter-spacing:.24em; color:var(--shu)}
+.sec-head h2{font-size:clamp(26px,4vw,44px)}
+.sec-head .sub{max-width:38ch; font-size:14px; color:var(--ink-soft); line-height:1.85}
+.rv{opacity:0; transform:translateY(26px); transition:opacity .8s var(--ease), transform .8s var(--ease)}
+.rv.in{opacity:1; transform:none}
+.rv.d1{transition-delay:.08s}.rv.d2{transition-delay:.16s}.rv.d3{transition-delay:.24s}.rv.d4{transition-delay:.32s}
+
+/* ---------- 01 categories ---------- */
+.cats{background:var(--paper-2); border-top:1px solid var(--line); border-bottom:1px solid var(--line)}
+.cat-grid{display:grid; grid-template-columns:repeat(12,1fr); gap:14px}
+.cat{position:relative; border:1px solid var(--line-strong); border-radius:4px; padding:22px 20px 20px; background:var(--paper);
+  min-height:150px; display:flex; flex-direction:column; justify-content:space-between; cursor:pointer; overflow:hidden;
+  transition:transform .4s var(--ease), box-shadow .4s var(--ease), border-color .3s}
+.cat:hover{transform:translateY(-4px); box-shadow:0 22px 40px -26px rgba(0,0,0,.5); border-color:var(--cc)}
+.cat .kanji{font-family:var(--serif); font-size:15px; letter-spacing:.14em; color:var(--cc-t); writing-mode:vertical-rl; position:absolute; top:16px; right:14px; opacity:.55}
+.cat .en{font-size:10px; letter-spacing:.22em; color:var(--ink-soft)}
+.cat h3{font-size:22px; margin-top:auto}
+.cat .n{font-size:11px; color:var(--ink-soft)}
+.cat .bar{position:absolute; left:0; top:0; bottom:0; width:4px; background:var(--cc)}
+.cat canvas{position:absolute; right:-6px; bottom:-6px; width:76px; height:76px; opacity:.9}
+.cat.s5{grid-column:span 5}.cat.s4{grid-column:span 4}.cat.s3{grid-column:span 3}.cat.s7{grid-column:span 7}
+@media(max-width:820px){.cat-grid{grid-template-columns:repeat(6,1fr)} .cat.s5,.cat.s4,.cat.s3,.cat.s7{grid-column:span 3}}
+@media(max-width:520px){.cat-grid{grid-template-columns:repeat(2,1fr)} .cat.s5,.cat.s4,.cat.s3,.cat.s7{grid-column:span 1}}
+
+/* ---------- 02 insider scrollytelling ---------- */
+.insider{display:grid; grid-template-columns:1fr 1fr; gap:clamp(28px,5vw,80px); align-items:start}
+.insider .sticky{position:sticky; top:14vh; align-self:start}
+.map-card{position:relative; border:1px solid var(--line-strong); border-radius:6px; overflow:hidden; background:var(--paper-3); aspect-ratio:4/5}
+.map-card canvas{width:100%; height:100%; display:block}
+.map-card .tag{position:absolute; bottom:14px; left:14px; font-size:11px; letter-spacing:.14em; background:var(--paper); border:1px solid var(--line-strong); padding:6px 12px; border-radius:999px; transition:.4s}
+.steps{display:flex; flex-direction:column; gap:clamp(40px,9vh,110px); padding:6vh 0}
+.step{border-left:2px solid var(--line); padding-left:26px; position:relative; transition:border-color .5s}
+.step.active{border-color:var(--shu)}
+.step .idx{font-size:12px; letter-spacing:.2em; color:var(--shu); margin-bottom:10px}
+.step h3{font-size:clamp(22px,3vw,30px); margin-bottom:12px}
+.step p{color:var(--ink-soft); font-size:15px; line-height:1.95}
+@media(max-width:820px){.insider{grid-template-columns:1fr} .insider .sticky{position:relative; top:0; margin-bottom:20px}}
+
+/* ---------- 03 route crest ---------- */
+.crest-sec{background:var(--ink); color:var(--paper)}
+.crest-sec h2{color:var(--paper)}
+.crest-sec .sub{color:var(--paper); opacity:.62}
+.crest-sec .sec-num{color:var(--shu)}
+.crest-row{display:grid; grid-template-columns:repeat(3,1fr); gap:20px}
+.crest-card{border:1px solid; border-color:color-mix(in srgb, var(--paper) 22%, transparent); border-radius:6px; padding:26px; background:color-mix(in srgb, var(--paper) 5%, transparent); text-align:center}
+.crest-card canvas{width:180px; height:180px; margin:0 auto 16px; display:block}
+.crest-card h3{font-size:19px; color:var(--paper); margin-bottom:6px}
+.crest-card p{font-size:12px; color:var(--paper); opacity:.55; letter-spacing:.06em}
+@media(max-width:760px){.crest-row{grid-template-columns:1fr}}
+
+/* ---------- 04 weaving loader ---------- */
+.weave{display:grid; grid-template-columns:.9fr 1.1fr; gap:clamp(30px,5vw,70px); align-items:center}
+.weave .panel{border:1px solid var(--line-strong); border-radius:8px; background:var(--paper-2); padding:34px; overflow:hidden}
+.loom{width:100%; aspect-ratio:1/1; display:block}
+.weave .status{margin-top:18px; text-align:center; font-family:var(--serif); font-size:16px; letter-spacing:.08em; color:var(--ai); min-height:24px}
+.weave ul{list-style:none; padding:0; margin:20px 0 0; display:flex; flex-direction:column; gap:14px}
+.weave li{display:flex; gap:14px; font-size:14px; color:var(--ink-soft)}
+.weave li .k{font-family:var(--serif); color:var(--shu); font-size:13px; letter-spacing:.1em; min-width:64px}
+@media(max-width:820px){.weave{grid-template-columns:1fr}}
+
+/* ---------- 05 itinerary ---------- */
+.itin{display:grid; grid-template-columns:repeat(12,1fr); gap:16px}
+.itin .lead{grid-column:span 5; align-self:center}
+.itin .lead h2{font-size:clamp(26px,3.6vw,40px); margin-bottom:16px}
+.itin .lead p{color:var(--ink-soft); font-size:14px; line-height:1.9}
+.day{grid-column:span 7; border:1px solid var(--line-strong); border-radius:8px; background:var(--paper); overflow:hidden}
+.day .hd{display:flex; align-items:baseline; gap:12px; padding:16px 22px; border-bottom:1px solid var(--line); background:var(--paper-2)}
+.day .hd b{font-family:var(--serif); font-size:20px} .day .hd span{font-size:11px; letter-spacing:.16em; color:var(--ink-soft)}
+.spot{display:grid; grid-template-columns:70px 1fr auto; gap:14px; padding:16px 22px; border-bottom:1px solid var(--line); align-items:center}
+.spot:last-child{border-bottom:0}
+.spot .t{font-size:12px; color:var(--ai); letter-spacing:.08em; font-variant-numeric:tabular-nums}
+.spot h4{font-family:var(--serif); font-size:16px; font-weight:600; margin:0 0 3px}
+.spot .d{font-size:12px; color:var(--ink-soft)}
+.chip{font-size:10px; letter-spacing:.08em; padding:4px 10px; border-radius:999px; white-space:nowrap; border:1px solid}
+@media(max-width:820px){.itin .lead,.day{grid-column:1/-1}}
+
+/* ---------- CTA ---------- */
+.cta-band{background:var(--ai); color:#fff; text-align:center}
+.cta-band h2{color:#fff; font-size:clamp(28px,4.6vw,52px); margin-bottom:20px}
+.cta-band p{color:rgba(255,255,255,.82); max-width:40ch; margin:0 auto 34px}
+.cta-band .btn-primary{background:#fff; color:var(--ai); box-shadow:none}
+.cta-band .btn-primary:hover{transform:translateY(-2px)}
+
+footer{border-top:1px solid var(--line); padding:44px clamp(18px,4vw,44px); display:flex; justify-content:space-between; flex-wrap:wrap; gap:20px; font-size:12px; color:var(--ink-soft)}
+footer .brand{font-size:18px}
+footer a:hover{color:var(--shu)}
+
+@media (prefers-reduced-motion: reduce){
+  *{animation:none !important; transition-duration:.001ms !important}
+  .rv{opacity:1; transform:none}
+  .hero h1 .line>span{transform:none}
+}
+</style>
+
+<svg class="grain" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><filter id="gr"><feTurbulence type="fractalNoise" baseFrequency="0.82" numOctaves="2" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(#gr)"/></svg>
+
+<div class="topbar" id="topbar">
+  <div class="brand">SatoTrip<span class="dot">.</span><small>里 を 旅 す る</small></div>
+  <nav class="nav">
+    <a class="lnk" href="#cats">趣味で選ぶ</a>
+    <a class="lnk" href="#insider">地元インサイダー</a>
+    <a class="lnk" href="#crest">ルート紋章</a>
+    <button class="theme-tgl" id="themeBtn" aria-label="テーマ切替">◐</button>
+    <a class="cta" href="#cta">はじめる</a>
+  </nav>
+</div>
+
+<header class="hero" id="hero">
+  <canvas id="topo" aria-hidden="true"></canvas>
+  <span class="coord tl">N 34°58′ · E 137°09′ — 等高線モード</span>
+  <span class="coord br">SatoTrip Atlas ／ 全国 47 都道府県 収録</span>
+  <div class="hero-inner">
+    <span class="eyebrow"><span class="ln"></span>趣味 × 地元インサイダー</span>
+    <h1>
+      <span class="line"><span>地図に載らない、</span></span>
+      <span class="line"><span>あなただけの<span class="em">里</span>を旅する。</span></span>
+    </h1>
+    <p class="lede">ツーリングも、カフェ巡りも、サウナも。趣味の解像度で全国を検索し、地元の人しか知らない一日を、一冊のしおりに編みます。</p>
+    <div class="actions">
+      <button class="btn btn-primary" onclick="location.href='#cta'">プランを編みはじめる →</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('cats').scrollIntoView({behavior:'smooth'})">趣味から探す</button>
+    </div>
+  </div>
+  <canvas class="crest" id="heroCrest" width="360" height="360" aria-hidden="true"></canvas>
+  <div class="meta">
+    <div><b>8</b>趣味カテゴリ</div>
+    <div><b>1,240+</b>ローカル収録スポット</div>
+    <div><b>47</b>都道府県 全国展開</div>
+  </div>
+</header>
+
+<section class="cats" id="cats">
+  <div class="wrap">
+    <div class="sec-head">
+      <div>
+        <div class="sec-num rv">01 — HOBBIES</div>
+        <h2 class="rv d1">「何をしたいか」から、旅がはじまる。</h2>
+      </div>
+      <p class="sub rv d2">目的地ではなく、趣味の解像度で全国を横断検索。ニッチな嗜好ほど、地元の深いスポットに繋がります。</p>
+    </div>
+    <div class="cat-grid" id="catGrid"></div>
+  </div>
+</section>
+
+<section id="insider">
+  <div class="wrap insider">
+    <div class="sticky">
+      <div class="map-card">
+        <canvas id="miniMap" width="520" height="650"></canvas>
+        <span class="tag" id="mapTag">◎ 里の等高線</span>
+      </div>
+    </div>
+    <div>
+      <div class="sec-head" style="margin-bottom:24px">
+        <div><div class="sec-num rv">02 — LOCAL INSIDER</div>
+        <h2 class="rv d1">ガイドブックの、<br>ひとつ奥へ。</h2></div>
+      </div>
+      <div class="steps" id="steps">
+        <div class="step" data-tag="◎ 地元の口コミ">
+          <div class="idx">01</div><h3>地元の人が通う場所</h3>
+          <p>星の数ではなく、地元の常連が実際に足を運ぶ店・道・時間帯。観光地図の外側にある「日常の名所」を、SatoTripは拾い上げます。</p>
+        </div>
+        <div class="step" data-tag="◎ 趣味の文脈">
+          <div class="idx">02</div><h3>趣味の文脈で繋げる</h3>
+          <p>ツーリングなら峠と湧水と定食屋を、カフェ巡りなら焙煎所と器の作家を。点ではなく、趣味の物語として一日を組み立てます。</p>
+        </div>
+        <div class="step" data-tag="◎ 季節と時間">
+          <div class="idx">03</div><h3>季節と時間まで設計</h3>
+          <p>朝霧の棚田、夕暮れのサウナ、雨上がりの苔。同じ場所でも「いつ行くか」で価値が変わる。時間軸まで含めて提案します。</p>
+        </div>
+        <div class="step" data-tag="◎ 一冊のしおり">
+          <div class="idx">04</div><h3>一冊のしおりになる</h3>
+          <p>完成した旅は、同人誌のような一冊のしおりに。ルート紋章とともに手元に残り、旅のあとも読み返せる記録になります。</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="crest-sec" id="crest">
+  <div class="wrap">
+    <div class="sec-head">
+      <div><div class="sec-num rv">03 — ROUTE CREST</div>
+      <h2 class="rv d1">あなたの旅路が、<br>ひとつの紋章になる。</h2></div>
+      <p class="sub rv d2">訪れたスポットの座標・順路・趣味の色から、二つと同じもののない「ルート紋章」を生成。旅の記録であり、しおりの表紙です。</p>
+    </div>
+    <div class="crest-row" id="crestRow"></div>
+  </div>
+</section>
+
+<section id="weave">
+  <div class="wrap weave">
+    <div class="panel">
+      <canvas class="loom" id="loom" width="440" height="440"></canvas>
+      <div class="status" id="loomStatus">しおりを編んでいます…</div>
+    </div>
+    <div>
+      <div class="sec-num rv">04 — WEAVING</div>
+      <h2 class="rv d1" style="font-size:clamp(26px,4vw,44px); margin:8px 0 16px">待ち時間も、旅の一部に。</h2>
+      <p class="rv d2" style="color:var(--ink-soft); max-width:42ch; line-height:1.9">AIがプランを生成する数十秒。無機質なスピナーではなく、あなたの旅が一本ずつ糸のように編まれていく様子を見せます。生成の裏側で、SatoTripは全国のローカルデータを織り込んでいます。</p>
+      <ul>
+        <li class="rv d2"><span class="k">解 析</span>あなたの趣味と時間・予算を読み解く</li>
+        <li class="rv d3"><span class="k">探 索</span>地元インサイダーのスポットを照合</li>
+        <li class="rv d3"><span class="k">経 路</span>移動と季節・時間で順路を最適化</li>
+        <li class="rv d4"><span class="k">製 本</span>ルート紋章とともに一冊に製本</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section style="background:var(--paper-2); border-top:1px solid var(--line); border-bottom:1px solid var(--line)">
+  <div class="wrap">
+    <div class="itin">
+      <div class="lead rv">
+        <div class="sec-num">05 — SAMPLE</div>
+        <h2>奥三河・<br>珈琲とワインディング</h2>
+        <p>ツーリング × カフェ巡り。峠道と焙煎所を繋いだ、地元ライダー監修の日帰りプラン。趣味を掛け合わせるほど、旅はニッチに深くなります。</p>
+        <div style="display:flex; gap:8px; margin-top:16px; flex-wrap:wrap">
+          <span class="chip" style="color:var(--c-touring-t); border-color:var(--c-touring)">縹 ツーリング</span>
+          <span class="chip" style="color:var(--c-cafe-t); border-color:var(--c-cafe)">琥珀 カフェ</span>
+        </div>
+      </div>
+      <div class="day rv d2">
+        <div class="hd"><b>Day 1</b><span>OKUMIKAWA LOOP · 168km</span></div>
+        <div class="spot"><div class="t">07:30</div><div><h4>茶臼山高原道路</h4><div class="d">朝霧の稜線を抜けるワインディング</div></div><span class="chip" style="color:var(--c-touring-t);border-color:var(--c-touring)">縹</span></div>
+        <div class="spot"><div class="t">10:00</div><div><h4>山間の自家焙煎スタンド</h4><div class="d">地元ライダーの溜まり場・浅煎り</div></div><span class="chip" style="color:var(--c-cafe-t);border-color:var(--c-cafe)">琥珀</span></div>
+        <div class="spot"><div class="t">12:30</div><div><h4>湧水めしの定食屋</h4><div class="d">名水で炊く釜めし、常連の指定席</div></div><span class="chip" style="color:var(--c-food-t);border-color:var(--c-food)">山吹</span></div>
+        <div class="spot"><div class="t">15:00</div><div><h4>渓谷サウナ 河鹿</h4><div class="d">川へ飛び込む外気浴、要予約</div></div><span class="chip" style="color:var(--c-sauna-t);border-color:var(--c-sauna)">浅葱</span></div>
+        <div class="spot"><div class="t">17:30</div><div><h4>棚田の夕景ポイント</h4><div class="d">写真家が通う黄金時間の畦道</div></div><span class="chip" style="color:var(--c-photo-t);border-color:var(--c-photo)">躑躅</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="cta-band" id="cta">
+  <div class="wrap">
+    <h2>あなたの「好き」で、<br>全国を旅しよう。</h2>
+    <p>趣味を選ぶだけ。あとはSatoTripが、地元ならではの一日を一冊に編みます。</p>
+    <button class="btn btn-primary" onclick="alert('モックです：本番では登録フローへ遷移します')">無料でしおりを作る →</button>
+  </div>
+</section>
+
+<footer>
+  <div class="brand">SatoTrip<span class="dot" style="color:var(--shu)">.</span></div>
+  <div style="display:flex; gap:26px; flex-wrap:wrap">
+    <a href="#cats">趣味で選ぶ</a><a href="#insider">地元インサイダー</a><a href="#crest">ルート紋章</a><a href="#">運営会社</a><a href="#">利用規約</a>
+  </div>
+  <div>© 2026 SatoTrip — 里を旅する。 <span style="opacity:.6">redesign mock v3</span></div>
+</footer>
+
+<script>
+"use strict";
+const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const root=document.documentElement;
+function cssv(n){return getComputedStyle(document.body).getPropertyValue(n).trim();}
+function isDark(){const t=root.getAttribute('data-theme'); if(t)return t==='dark'; return matchMedia('(prefers-color-scheme:dark)').matches;}
+function seeded(seed){let s=seed>>>0||1;return()=>{s^=s<<13;s^=s>>>17;s^=s<<5;return((s>>>0)/4294967296);}}
+
+/* theme toggle */
+document.getElementById('themeBtn').addEventListener('click',()=>{
+  const cur=root.getAttribute('data-theme') || (matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light');
+  root.setAttribute('data-theme', cur==='dark'?'light':'dark');
+  setTimeout(()=>{drawHeroCrest();buildCrests();drawMiniMap();redrawGlyphs();},40);
+});
+
+/* topbar */
+addEventListener('scroll',()=>{document.getElementById('topbar').classList.toggle('solid', scrollY>60)},{passive:true});
+
+/* ============ HERO topographic-contour WebGL background ============ */
+(function topo(){
+  const cv=document.getElementById('topo');
+  const gl=cv.getContext('webgl',{antialias:true,alpha:false});
+  if(!gl){cv.style.background='linear-gradient(160deg,var(--paper),var(--paper-3))';return;}
+  const vs='attribute vec2 p;void main(){gl_Position=vec4(p,0.,1.);}';
+  const fs=`precision highp float;
+  uniform vec2 R; uniform float T; uniform vec3 A; uniform vec3 B; uniform vec3 L;
+  float h(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+  float n(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
+    return mix(mix(h(i),h(i+vec2(1,0)),f.x),mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x),f.y);}
+  float fbm(vec2 p){float v=0.,a=.5;for(int i=0;i<6;i++){v+=a*n(p);p*=2.03;a*=.5;}return v;}
+  void main(){
+    vec2 uv=gl_FragCoord.xy/R.xy; vec2 p=uv; p.x*=R.x/R.y;
+    vec2 q=vec2(fbm(p*1.4+T*0.02), fbm(p*1.4+vec2(3.1,1.7)));
+    float e=fbm(p*2.6 + 0.7*q + vec2(T*0.018,-T*0.011));
+    float bands=e*11.0; float f=fract(bands);
+    float line=1.0-(smoothstep(0.0,0.05,f)*smoothstep(0.0,0.05,1.0-f));
+    float shade=smoothstep(0.15,0.95,e);
+    vec3 base=mix(A,B,shade*0.6);
+    vec3 col=mix(base, L, line*0.42);
+    float vig=smoothstep(1.15,0.15,length(uv-vec2(0.28,0.5)));
+    col=mix(col, base, (1.0-vig)*0.5);
+    gl_FragColor=vec4(col,1.0);
+  }`;
+  function sh(t,s){const o=gl.createShader(t);gl.shaderSource(o,s);gl.compileShader(o);return o;}
+  const pr=gl.createProgram();gl.attachShader(pr,sh(gl.VERTEX_SHADER,vs));gl.attachShader(pr,sh(gl.FRAGMENT_SHADER,fs));gl.linkProgram(pr);gl.useProgram(pr);
+  const buf=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buf);
+  gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,3,-1,-1,3]),gl.STATIC_DRAW);
+  const lp=gl.getAttribLocation(pr,'p');gl.enableVertexAttribArray(lp);gl.vertexAttribPointer(lp,2,gl.FLOAT,false,0,0);
+  const uR=gl.getUniformLocation(pr,'R'),uT=gl.getUniformLocation(pr,'T'),
+        uA=gl.getUniformLocation(pr,'A'),uB=gl.getUniformLocation(pr,'B'),uL=gl.getUniformLocation(pr,'L');
+  function hex(c){c=c.replace('#','');return[parseInt(c.slice(0,2),16)/255,parseInt(c.slice(2,4),16)/255,parseInt(c.slice(4,6),16)/255];}
+  function palette(){return isDark()?{a:hex('141922'),b:hex('1d2634'),l:hex('4f79b0')}:{a:hex('f3efe4'),b:hex('e5ddca'),l:hex('2a4b7c')};}
+  function size(){const dpr=Math.min(devicePixelRatio||1,1.5);cv.width=innerWidth*dpr;cv.height=cv.clientHeight*dpr;gl.viewport(0,0,cv.width,cv.height);}
+  addEventListener('resize',size);size();
+  let t0=null;
+  function frame(ts){
+    if(t0===null)t0=ts;const T=(ts-t0)/1000;const P=palette();
+    gl.uniform2f(uR,cv.width,cv.height);gl.uniform1f(uT,RM?7.0:T);
+    gl.uniform3fv(uA,P.a);gl.uniform3fv(uB,P.b);gl.uniform3fv(uL,P.l);
+    gl.drawArrays(gl.TRIANGLES,0,3);
+    if(!RM)requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+requestAnimationFrame(()=>document.getElementById('hero').classList.add('in'));
+
+/* ============ ROUTE CREST generator ============ */
+function drawCrest(cv,seed,accent){
+  const ctx=cv.getContext('2d');const dpr=Math.min(devicePixelRatio||1,2);
+  const W=cv.width=cv.clientWidth*dpr,H=cv.height=cv.clientHeight*dpr;
+  const R=Math.min(W,H)/2,cx=W/2,cy=H/2,rnd=seeded(seed);
+  ctx.clearRect(0,0,W,H);
+  const line=isDark()?'rgba(237,231,218,.28)':'rgba(28,31,38,.22)';
+  ctx.lineWidth=Math.max(1,dpr*0.9);ctx.strokeStyle=line;
+  ctx.beginPath();ctx.arc(cx,cy,R*0.92,0,7);ctx.stroke();
+  ctx.beginPath();ctx.arc(cx,cy,R*0.84,0,7);ctx.stroke();
+  for(let i=0;i<48;i++){const a=i/48*Math.PI*2;const rr=(i%4===0)?R*0.80:R*0.83;
+    ctx.beginPath();ctx.moveTo(cx+Math.cos(a)*R*0.84,cy+Math.sin(a)*R*0.84);ctx.lineTo(cx+Math.cos(a)*rr,cy+Math.sin(a)*rr);ctx.stroke();}
+  ctx.strokeStyle=isDark()?'rgba(237,231,218,.10)':'rgba(28,31,38,.09)';
+  for(let k=0;k<5;k++){ctx.beginPath();
+    for(let a=0;a<=Math.PI*2+0.1;a+=0.18){const wob=0.06*Math.sin(a*3+k)+0.05*rnd();const rr=R*(0.30+k*0.10)*(1+wob);
+      const x=cx+Math.cos(a)*rr,y=cy+Math.sin(a)*rr;a===0?ctx.moveTo(x,y):ctx.lineTo(x,y);}ctx.closePath();ctx.stroke();}
+  const N=5+Math.floor(rnd()*3),pts=[];
+  for(let i=0;i<N;i++){const a=rnd()*Math.PI*2,rr=R*(0.22+rnd()*0.45);pts.push([cx+Math.cos(a)*rr,cy+Math.sin(a)*rr]);}
+  ctx.strokeStyle=accent;ctx.lineWidth=Math.max(1.6,dpr*1.6);ctx.lineJoin='round';ctx.lineCap='round';
+  ctx.beginPath();pts.forEach((p,i)=>i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]));ctx.stroke();
+  pts.forEach((p,i)=>{ctx.fillStyle=(i===0)?accent:(isDark()?'#141922':'#FAF8F3');ctx.strokeStyle=accent;ctx.lineWidth=dpr*1.4;
+    ctx.beginPath();ctx.arc(p[0],p[1],dpr*(i===0?4.2:3.2),0,7);ctx.fill();ctx.stroke();});
+  ctx.fillStyle=accent;ctx.save();ctx.translate(cx,cy);
+  ctx.beginPath();for(let i=0;i<8;i++){const a=i/8*Math.PI*2;const rr=(i%2?R*0.05:R*0.11);
+    const x=Math.cos(a-Math.PI/2)*rr,y=Math.sin(a-Math.PI/2)*rr;i?ctx.lineTo(x,y):ctx.moveTo(x,y);}ctx.closePath();ctx.fill();ctx.restore();
+}
+function drawHeroCrest(){const c=document.getElementById('heroCrest');if(c)drawCrest(c,20260710,cssv('--shu')||'#B5493A');}
+drawHeroCrest();
+
+/* ============ CATEGORIES ============ */
+const CATS=[
+  {k:'縹',en:'TOURING',ja:'ツーリング',n:'峠・湧水・道の駅',cc:'--c-touring',ct:'--c-touring-t',s:'s5',g:'route'},
+  {k:'琥珀',en:'CAFE',ja:'カフェ巡り',n:'焙煎所・器・古民家',cc:'--c-cafe',ct:'--c-cafe-t',s:'s4',g:'bean'},
+  {k:'浅葱',en:'SAUNA',ja:'サウナ',n:'外気浴・水風呂・整い',cc:'--c-sauna',ct:'--c-sauna-t',s:'s3',g:'wave'},
+  {k:'躑躅',en:'PHOTO',ja:'写真',n:'黄金時間・棚田・廃線',cc:'--c-photo',ct:'--c-photo-t',s:'s3',g:'lens'},
+  {k:'弁柄',en:'HISTORY',ja:'歴史・街道',n:'宿場・城下・古社',cc:'--c-history',ct:'--c-history-t',s:'s4',g:'torii'},
+  {k:'苔',en:'NATURE',ja:'自然・渓谷',n:'苔・滝・原生林',cc:'--c-nature',ct:'--c-nature-t',s:'s5',g:'leaf'},
+  {k:'山吹',en:'GOURMET',ja:'ローカル飯',n:'郷土食・名水・市場',cc:'--c-food',ct:'--c-food-t',s:'s7',g:'bowl'},
+  {k:'桔梗',en:'ART',ja:'アート・工芸',n:'窯元・美術館・工房',cc:'--c-art',ct:'--c-art-t',s:'s5',g:'kiln'},
+];
+function glyph(cv,type,color){
+  const ctx=cv.getContext('2d');const dpr=Math.min(devicePixelRatio||1,2);
+  const W=cv.width=cv.clientWidth*dpr,H=cv.height=cv.clientHeight*dpr;ctx.clearRect(0,0,W,H);
+  ctx.strokeStyle=color;ctx.fillStyle=color;ctx.lineWidth=dpr*1.4;ctx.lineCap='round';ctx.lineJoin='round';
+  const cx=W/2,cy=H/2,r=Math.min(W,H)*0.30;ctx.globalAlpha=.9;
+  if(type==='route'){ctx.beginPath();ctx.moveTo(W*0.2,H*0.7);ctx.bezierCurveTo(W*0.4,H*0.3,W*0.6,H*0.9,W*0.82,H*0.35);ctx.stroke();
+    [[0.2,0.7],[0.82,0.35]].forEach(p=>{ctx.beginPath();ctx.arc(W*p[0],H*p[1],dpr*2.4,0,7);ctx.fill();});}
+  else if(type==='bean'){ctx.beginPath();ctx.ellipse(cx,cy,r,r*1.25,0.5,0,7);ctx.stroke();ctx.beginPath();ctx.moveTo(cx-r*0.5,cy-r*0.7);ctx.quadraticCurveTo(cx+r*0.2,cy,cx-r*0.4,cy+r*0.7);ctx.stroke();}
+  else if(type==='wave'){for(let i=0;i<3;i++){ctx.beginPath();for(let x=0;x<=W;x+=4){const y=cy+(i-1)*r*0.7+Math.sin(x/W*Math.PI*3)*r*0.32;x?ctx.lineTo(x,y):ctx.moveTo(x,y);}ctx.globalAlpha=.35+i*0.22;ctx.stroke();}}
+  else if(type==='lens'){ctx.beginPath();ctx.arc(cx,cy,r,0,7);ctx.stroke();ctx.beginPath();ctx.arc(cx,cy,r*0.5,0,7);ctx.stroke();ctx.beginPath();ctx.arc(cx+r*0.55,cy-r*0.55,dpr*2,0,7);ctx.fill();}
+  else if(type==='torii'){ctx.beginPath();ctx.moveTo(cx-r,cy-r*0.7);ctx.lineTo(cx+r,cy-r*0.7);ctx.moveTo(cx-r*0.85,cy-r*0.4);ctx.lineTo(cx+r*0.85,cy-r*0.4);ctx.moveTo(cx-r*0.6,cy-r*0.6);ctx.lineTo(cx-r*0.6,cy+r);ctx.moveTo(cx+r*0.6,cy-r*0.6);ctx.lineTo(cx+r*0.6,cy+r);ctx.stroke();}
+  else if(type==='leaf'){ctx.beginPath();ctx.moveTo(cx,cy+r);ctx.quadraticCurveTo(cx+r,cy-r*0.5,cx,cy-r);ctx.quadraticCurveTo(cx-r,cy-r*0.5,cx,cy+r);ctx.stroke();ctx.beginPath();ctx.moveTo(cx,cy-r);ctx.lineTo(cx,cy+r);ctx.stroke();}
+  else if(type==='bowl'){ctx.beginPath();ctx.arc(cx,cy,r,0.15*Math.PI,0.85*Math.PI);ctx.stroke();ctx.beginPath();ctx.moveTo(cx-r*1.15,cy+r*0.1);ctx.lineTo(cx+r*1.15,cy+r*0.1);ctx.stroke();for(let i=-1;i<2;i++){ctx.beginPath();ctx.moveTo(cx+i*r*0.4,cy-r*0.6);ctx.quadraticCurveTo(cx+i*r*0.4+r*0.2,cy-r,cx+i*r*0.4,cy-r*1.3);ctx.stroke();}}
+  else if(type==='kiln'){ctx.beginPath();ctx.moveTo(cx,cy-r);ctx.quadraticCurveTo(cx+r,cy-r,cx+r*0.7,cy+r);ctx.lineTo(cx-r*0.7,cy+r);ctx.quadraticCurveTo(cx-r,cy-r,cx,cy-r);ctx.stroke();ctx.beginPath();ctx.moveTo(cx-r*0.7,cy+r*0.2);ctx.lineTo(cx+r*0.7,cy+r*0.2);ctx.stroke();}
+  ctx.globalAlpha=1;
+}
+const cg=document.getElementById('catGrid');
+CATS.forEach((c,i)=>{
+  const el=document.createElement('div');el.className='cat rv '+c.s;el.style.setProperty('--cc',cssv(c.cc));el.style.setProperty('--cc-t',cssv(c.ct));
+  el.style.transitionDelay=(i%4*0.06)+'s';
+  el.innerHTML=`<span class="bar"></span><span class="kanji">${c.k}</span><div class="en">${c.en}</div><h3>${c.ja}</h3><div class="n">${c.n}</div><canvas width="76" height="76"></canvas>`;
+  cg.appendChild(el);
+  glyph(el.querySelector('canvas'),c.g,cssv(c.ct));
+  el.addEventListener('mouseenter',()=>glyph(el.querySelector('canvas'),c.g,cssv(c.cc)));
+  el.addEventListener('mouseleave',()=>glyph(el.querySelector('canvas'),c.g,cssv(c.ct)));
+});
+function redrawGlyphs(){document.querySelectorAll('.cat').forEach((el,i)=>glyph(el.querySelector('canvas'),CATS[i].g,cssv(CATS[i].ct)));}
+
+/* ============ CREST cards ============ */
+function buildCrests(){
+  const row=document.getElementById('crestRow');row.innerHTML='';
+  [{t:'奥三河ループ',s:'ツーリング × カフェ',seed:7731,cc:'--c-touring'},
+   {t:'瀬戸内 陶と灯',s:'アート × 歴史',seed:4412,cc:'--c-art'},
+   {t:'東北 苔と湯',s:'自然 × サウナ',seed:9987,cc:'--c-nature'}].forEach(d=>{
+    const card=document.createElement('div');card.className='crest-card rv';
+    card.innerHTML=`<canvas width="180" height="180"></canvas><h3>${d.t}</h3><p>${d.s}</p>`;
+    row.appendChild(card);drawCrest(card.querySelector('canvas'),d.seed,cssv(d.cc));io.observe(card);
+  });
+}
+
+/* ============ MINI MAP ============ */
+function drawMiniMap(){
+  const cv=document.getElementById('miniMap');if(!cv)return;const ctx=cv.getContext('2d');
+  const dpr=Math.min(devicePixelRatio||1,2);const W=cv.width=cv.clientWidth*dpr,H=cv.height=cv.clientHeight*dpr;
+  ctx.clearRect(0,0,W,H);ctx.fillStyle=cssv('--paper-3');ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle=isDark()?'rgba(123,167,217,.22)':'rgba(42,75,124,.20)';ctx.lineWidth=dpr;
+  for(let k=0;k<9;k++){ctx.beginPath();for(let a=0;a<=Math.PI*2+0.1;a+=0.14){
+    const wob=0.10*Math.sin(a*2.3+k*0.7)+0.06*Math.sin(a*5+k);const rr=Math.min(W,H)*(0.10+k*0.055)*(1+wob);
+    const x=W*0.5+Math.cos(a)*rr,y=H*0.5+Math.sin(a)*rr;a===0?ctx.moveTo(x,y):ctx.lineTo(x,y);}ctx.closePath();ctx.stroke();}
+  const acc=cssv('--shu');ctx.strokeStyle=acc;ctx.lineWidth=dpr*2;ctx.lineJoin='round';ctx.lineCap='round';
+  const pts=[[.2,.82],[.34,.55],[.52,.62],[.6,.38],[.78,.28]];
+  ctx.beginPath();pts.forEach((p,i)=>i?ctx.lineTo(W*p[0],H*p[1]):ctx.moveTo(W*p[0],H*p[1]));ctx.stroke();
+  pts.forEach((p,i)=>{ctx.fillStyle=i===0?acc:cssv('--paper');ctx.strokeStyle=acc;ctx.lineWidth=dpr*1.6;
+    ctx.beginPath();ctx.arc(W*p[0],H*p[1],dpr*(i===0?5:3.6),0,7);ctx.fill();ctx.stroke();});
+}
+drawMiniMap();
+
+/* ============ reveals + scrollytelling ============ */
+const io=new IntersectionObserver((es)=>{es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target);}})},{threshold:.16,rootMargin:'0px 0px -6% 0px'});
+document.querySelectorAll('.rv').forEach(el=>io.observe(el));
+buildCrests();
+const steps=[...document.querySelectorAll('.step')];const mapTag=document.getElementById('mapTag');
+const sio=new IntersectionObserver((es)=>{es.forEach(e=>{if(e.isIntersecting){
+  steps.forEach(s=>s.classList.remove('active'));e.target.classList.add('active');mapTag.textContent=e.target.dataset.tag;}})},{rootMargin:'-45% 0px -45% 0px'});
+steps.forEach(s=>sio.observe(s));
+
+/* ============ WEAVING loader ============ */
+(function loom(){
+  const cv=document.getElementById('loom');const ctx=cv.getContext('2d');
+  const dpr=Math.min(devicePixelRatio||1,2);const S=cv.width=cv.clientWidth*dpr;cv.height=S;
+  const status=document.getElementById('loomStatus');
+  const msgs=['あなたの趣味を読み解いています…','地元インサイダーを照合中…','順路を最適化しています…','ルート紋章を彫っています…','しおりを製本しています…'];
+  const cats=['--c-touring','--c-cafe','--c-sauna','--c-photo','--c-nature','--c-food','--c-art','--c-history'];
+  let started=false;
+  function run(){
+    const pad=S*0.12,area=S-pad*2,lines=14,gap=area/lines;let t=0;
+    function frame(){
+      ctx.clearRect(0,0,S,S);ctx.fillStyle=cssv('--paper-2');ctx.fillRect(0,0,S,S);
+      const prog=RM?1:(t%300)/300;
+      ctx.strokeStyle=isDark()?'rgba(237,231,218,.14)':'rgba(28,31,38,.13)';ctx.lineWidth=dpr;
+      for(let i=0;i<=lines;i++){const x=pad+i*gap;ctx.beginPath();ctx.moveTo(x,pad);ctx.lineTo(x,S-pad);ctx.stroke();}
+      const woven=Math.floor(prog*lines);
+      for(let j=0;j<=woven;j++){const y=pad+j*gap;const col=cssv(cats[j%cats.length]);
+        ctx.strokeStyle=col;ctx.lineWidth=dpr*2.2;ctx.globalAlpha=j===woven?(prog*lines-woven):1;
+        ctx.beginPath();
+        for(let x=pad;x<=S-pad;x+=gap/2){const over=Math.floor((x-pad)/(gap/2))%2===(j%2);const yy=y+(over?-1:1)*gap*0.16;x===pad?ctx.moveTo(x,yy):ctx.lineTo(x,yy);}
+        ctx.stroke();ctx.globalAlpha=1;}
+      if(!RM){const sy=pad+woven*gap;const sx=pad+(prog*lines-woven)*area;ctx.fillStyle=cssv('--shu');ctx.beginPath();ctx.ellipse(sx,sy,dpr*7,dpr*3,0,0,7);ctx.fill();}
+      status.textContent=msgs[Math.min(woven,msgs.length-1)];
+      t++;if(!RM)requestAnimationFrame(frame);
+    }
+    frame();
+  }
+  const lio=new IntersectionObserver((es)=>{es.forEach(e=>{if(e.isIntersecting&&!started){started=true;run();lio.disconnect();}})},{threshold:.3});
+  lio.observe(cv);
+})();
+
+addEventListener('resize',()=>{clearTimeout(window.__rz);window.__rz=setTimeout(()=>{drawHeroCrest();drawMiniMap();buildCrests();redrawGlyphs();},200);});
+</script>

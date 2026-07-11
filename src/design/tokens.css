@@ -1,0 +1,62 @@
+/* ============================================================
+   SatoTrip デザイントークン — 「旅の同人誌 × 地形図」
+   docs/ui-redesign/DESIGN_PROPOSAL.md §3 の実装。
+   旧画面はこの変数を参照しなくても壊れない（追加のみ・非破壊）。
+   ダークは「新デザイン画面のみ」方針(§7.4)のため、
+   .st-theme-dark を明示的に付けたサブツリーでだけ切り替わる。
+   ============================================================ */
+
+:root {
+  /* --- 基調 --- */
+  --st-paper: #FAF8F3;        /* 白練 */
+  --st-paper-2: #F2EEE3;
+  --st-paper-3: #EAE4D5;
+  --st-ink: #1C1F26;          /* 青みの墨 */
+  --st-ink-soft: #3D424E;
+  --st-line: #DCD6C9;
+  --st-line-strong: #C3BBA9;
+  --st-ai: #2A4B7C;           /* 藍 — 構造・地形線 */
+  --st-shu: #B5493A;          /* 朱 — CTA・ルート */
+
+  /* --- 趣味カテゴリ 和色 8 色（chip = 面 / text = 紙上の文字色）--- */
+  --st-cat-touring: #2166A6;  --st-cat-touring-text: #1A4E7F;  /* 縹 */
+  --st-cat-cafe: #A86A1F;     --st-cat-cafe-text: #7F4F14;     /* 琥珀 */
+  --st-cat-sauna: #0F8196;    --st-cat-sauna-text: #0B6072;    /* 浅葱 */
+  --st-cat-photo: #B8447F;    --st-cat-photo-text: #8C3361;    /* 躑躅 */
+  --st-cat-history: #A24328;  --st-cat-history-text: #79301C;  /* 弁柄 */
+  --st-cat-nature: #4F7C3A;   --st-cat-nature-text: #3A5C2B;   /* 苔 */
+  --st-cat-food: #C69211;     --st-cat-food-text: #8F6A0C;     /* 山吹 */
+  --st-cat-art: #6A4F9E;      --st-cat-art-text: #4F3A78;      /* 桔梗 */
+
+  /* --- モーション --- */
+  --st-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --st-dur-micro: 0.15s;
+  --st-dur-ui: 0.4s;
+  --st-dur-reveal: 0.8s;
+
+  /* --- 書体（明朝=声 / ゴシック=道具）--- */
+  --st-serif: "Hiragino Mincho ProN", "Yu Mincho", "YuMincho", "Noto Serif JP", serif;
+  --st-gothic: "Hiragino Kaku Gothic ProN", "Yu Gothic", "YuGothic", "Noto Sans JP", system-ui, sans-serif;
+}
+
+/* 新デザイン画面のルート要素に .st-theme-dark を付与したときだけ反転 */
+.st-theme-dark {
+  --st-paper: #14171E;        /* 藍墨 */
+  --st-paper-2: #1B1F28;
+  --st-paper-3: #222834;
+  --st-ink: #EDE7DA;
+  --st-ink-soft: #B7B1A3;
+  --st-line: #2A303B;
+  --st-line-strong: #3A424F;
+  --st-ai: #7BA7D9;
+  --st-shu: #E07A5F;
+
+  --st-cat-touring-text: #7FB3E6;
+  --st-cat-cafe-text: #DBA64E;
+  --st-cat-sauna-text: #4FC3D6;
+  --st-cat-photo-text: #E58BBB;
+  --st-cat-history-text: #E0876C;
+  --st-cat-nature-text: #8FC06E;
+  --st-cat-food-text: #E6C05A;
+  --st-cat-art-text: #B39AE0;
+}

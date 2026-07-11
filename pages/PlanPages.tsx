@@ -7,6 +7,11 @@ import * as planApi from '../src/api/plans';
 import * as hotelApi from '../src/api/hotels';
 import * as spotApi from '../src/api/spots';
 import { SpotAddModal } from '../components/SpotAddModal';
+import WeavingLoader from '../components/design/WeavingLoader';
+import RouteCrest from '../components/RouteCrest';
+import CategoryGlyph from '../components/design/CategoryGlyph';
+import { seedFromString, pointsFromCoords } from '../src/design/crest';
+import { CATEGORY_TOKENS, HobbyCategory } from '../src/design/tokens';
 import {
   DndContext,
   closestCenter,
@@ -665,24 +670,50 @@ const LeafletMap: React.FC<{
 };
 
 
+// 入力途中のフォームを自動保存するキー（重複入力を防ぐ・UX確定事項）
+const CREATE_DRAFT_KEY = 'satotrip_create_draft_v1';
+
+const DEFAULT_PLAN_REQUEST: PlanRequest = {
+  destination: '',
+  days: 2,
+  budget: 'standard',
+  themes: [],
+  checkInDate: undefined,
+  checkOutDate: undefined,
+  numGuests: 2
+};
+
 export const CreatePlan: React.FC<{ onNavigate: (path: string) => void }> = ({ onNavigate }) => {
-  const [step, setStep] = useState(1);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationPhase, setGenerationPhase] = useState<string>('');
-  const [request, setRequest] = useState<PlanRequest>({
-    destination: '',
-    days: 2,
-    budget: 'standard',
-    themes: [],
-    checkInDate: undefined,
-    checkOutDate: undefined,
-    numGuests: 2
-  });
+  const [request, setRequest] = useState<PlanRequest>(DEFAULT_PLAN_REQUEST);
   const [pendingSpots, setPendingSpots] = useState<Spot[]>([]);
   const [activeRegion, setActiveRegion] = useState(regions[1].id); // Default to Kanto
+  const [draftRestored, setDraftRestored] = useState(false);
 
-  // Check for pending spots passed from Favorites page
+  // 下書きの復元 → ランディングから渡された趣味(?hobby=)の追加 → お気に入りスポット
+  // の順に初期化する。どの経路でも「もう一度入力し直す」ことが起きないようにする。
   useEffect(() => {
+    try {
+      const raw = localStorage.getItem(CREATE_DRAFT_KEY);
+      if (raw) {
+        const draft = JSON.parse(raw);
+        setRequest(prev => ({ ...prev, ...draft }));
+        setDraftRestored(true);
+      }
+    } catch { /* 壊れた下書きは無視 */ }
+
+    // ランディングの趣味カードから遷移した場合、選択済みとして引き継ぐ
+    const query = window.location.hash.split('?')[1];
+    const hobby = query ? new URLSearchParams(query).get('hobby') : null;
+    if (hobby && (CATEGORY_TOKENS as Record<string, { label: string }>)[hobby]) {
+      const label = CATEGORY_TOKENS[hobby as HobbyCategory].label;
+      setRequest(prev =>
+        prev.themes.includes(label) ? prev : { ...prev, themes: [...prev.themes, label] }
+      );
+    }
+
+    // Check for pending spots passed from Favorites page
     const stored = localStorage.getItem(AppConfig.STORAGE_KEYS.PENDING_SPOTS);
     if (!stored) return;
 
@@ -709,6 +740,19 @@ export const CreatePlan: React.FC<{ onNavigate: (path: string) => void }> = ({ o
       setRequest(prev => ({ ...prev, destination: selected[0].area }));
     }
   }, []);
+
+  // 入力のたびに下書きを保存（生成成功時とリセット時に破棄）
+  useEffect(() => {
+    try {
+      localStorage.setItem(CREATE_DRAFT_KEY, JSON.stringify(request));
+    } catch { /* ストレージ不可でも入力は継続できる */ }
+  }, [request]);
+
+  const resetForm = () => {
+    localStorage.removeItem(CREATE_DRAFT_KEY);
+    setRequest(DEFAULT_PLAN_REQUEST);
+    setDraftRestored(false);
+  };
 
 
   const handleThemeToggle = (theme: string) => {
@@ -762,7 +806,8 @@ export const CreatePlan: React.FC<{ onNavigate: (path: string) => void }> = ({ o
         alert(message);
       }
 
-      // プラン詳細ページに遷移
+      // 生成に成功したので下書きを破棄し、プラン詳細ページに遷移
+      localStorage.removeItem(CREATE_DRAFT_KEY);
       onNavigate(`/plan/${newPlan.id}`);
 
     } catch (e: any) {
@@ -775,34 +820,31 @@ export const CreatePlan: React.FC<{ onNavigate: (path: string) => void }> = ({ o
   };
 
   if (isGenerating) {
+    // 「しおりが編まれる」生成待ち画面（DESIGN_PROPOSAL §6 / WeavingLoader）
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-white px-4">
-        <div className="relative w-32 h-32 mb-8">
-          <div className="absolute inset-0 border-4 border-gray-100 rounded-full"></div>
-          <div className="absolute inset-0 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-          <div className="absolute inset-0 flex items-center justify-center">
-            <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuCfMSI_vEQcW6uWaOllfqi75Njj5epUUHan7iKYq2ddAZoSthgXSLKdhXLtyvGQeDOWHCvMIb9zHR29P6R1MHTCyE0GBmQFcmGptEhCWUuL8GTANN3rvEBzwrgvyl2srrrUMRms1iDYE5uxYWZET7_hlJDkiMX5A9SRf5w0qYmIJZMQq94roefVcSp5yXCk6-cjB3diA5SN8xBWRjHxaLVpf_bvPHdIi4cn84z3ACcaFosupiz3lF_kn0umIyl14BROFmriQ29o9iI" alt="Logo" className="w-16 h-16 animate-pulse" />
-          </div>
+      <div
+        className="min-h-screen flex flex-col items-center justify-center px-4"
+        style={{ background: 'var(--st-paper)', color: 'var(--st-ink)', fontFamily: 'var(--st-gothic)' }}
+      >
+        <div
+          style={{
+            border: '1px solid var(--st-line-strong)', borderRadius: 8,
+            background: 'var(--st-paper-2)', padding: 28, marginBottom: 24,
+          }}
+        >
+          <WeavingLoader size={260} />
         </div>
-        <h2 className="text-2xl font-bold mb-2 animate-pulse">{generationPhase}</h2>
-        <p className="text-text-muted mb-8 text-center max-w-md">
-          SatoTripの膨大な観光データベースから、{request.destination}の最適プランを構築中。<br />
-          事前に収集されたトレンド情報を活用しています。
+        <h2
+          aria-live="polite"
+          style={{ fontFamily: 'var(--st-serif)', fontWeight: 600, fontSize: 20, letterSpacing: '0.06em', color: 'var(--st-ai)', margin: '0 0 10px' }}
+        >
+          {generationPhase}
+        </h2>
+        <p style={{ color: 'var(--st-ink-soft)', textAlign: 'center', maxWidth: '42ch', fontSize: 14, lineHeight: 1.9, margin: 0 }}>
+          {request.destination}の一日を、一冊のしおりに編んでいます。
+          <br />
+          地元インサイダーの情報を織り込むため、少しだけお待ちください。
         </p>
-
-        <div className="w-full max-w-md bg-gray-100 rounded-full h-2 overflow-hidden">
-          <div className="h-full bg-primary animate-progress"></div>
-        </div>
-
-        <style>{`
-          @keyframes progress {
-            0% { width: 0%; }
-            100% { width: 100%; }
-          }
-          .animate-progress {
-            animation: progress 8s ease-in-out forwards;
-          }
-        `}</style>
       </div>
     );
   }
@@ -811,20 +853,22 @@ export const CreatePlan: React.FC<{ onNavigate: (path: string) => void }> = ({ o
     <div className="min-h-screen bg-background-light py-12 px-4">
       <div className="max-w-2xl mx-auto">
         <div className="text-center mb-10">
-          <h1 className="text-3xl md:text-4xl font-black mb-4">AI Travel Planner</h1>
-          <div className="flex justify-center gap-2">
-            {[1, 2, 3].map(s => (
-              <div key={s} className={`h-2 w-12 rounded-full transition-colors ${step >= s ? 'bg-primary' : 'bg-gray-200'}`} />
-            ))}
-          </div>
+          <h1 className="text-3xl md:text-4xl mb-3" style={{ fontFamily: 'var(--st-serif)', fontWeight: 600 }}>しおりを編む</h1>
+          <p className="text-sm" style={{ color: 'var(--st-ink-soft)' }}>すべての項目はこのページでいつでも直せます。入力は自動保存されます。</p>
+          {draftRestored && (
+            <div className="mt-3 inline-flex items-center gap-3 text-xs px-4 py-2 rounded-full" style={{ background: 'var(--st-paper-2)', border: '1px solid var(--st-line)', color: 'var(--st-ink-soft)' }}>
+              前回の入力を復元しました
+              <button onClick={resetForm} className="underline hover:no-underline" style={{ color: 'var(--st-shu)' }}>最初からやり直す</button>
+            </div>
+          )}
         </div>
 
         <div className="bg-white rounded-2xl shadow-xl p-6 md:p-10 relative overflow-hidden">
-          {/* Step 1: Destination & Days */}
-          {step === 1 && (
-            <div className="animate-fade-in">
-              <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
-                <span className="bg-primary/10 text-primary w-8 h-8 rounded-full flex items-center justify-center text-sm">1</span>
+          {/* 目的地と日数（単一ページ化：全セクション常時表示・随時修正可能） */}
+          {(
+            <div>
+              <h2 className="text-2xl font-bold mb-6 flex items-center gap-2" style={{ fontFamily: 'var(--st-serif)' }}>
+                <span className="w-8 h-8 rounded-full flex items-center justify-center text-sm" style={{ background: 'var(--st-paper-2)', color: 'var(--st-shu)', border: '1px solid var(--st-line)' }}>一</span>
                 どこへ行きますか？
               </h2>
 
@@ -898,23 +942,15 @@ export const CreatePlan: React.FC<{ onNavigate: (path: string) => void }> = ({ o
                   </div>
                 </div>
 
-                <button
-                  onClick={() => request.destination && setStep(2)}
-                  disabled={!request.destination}
-                  className="w-full bg-primary text-white py-4 rounded-xl font-bold text-lg shadow-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-all mt-4"
-                >
-                  次へ進む
-                </button>
               </div>
             </div>
           )}
 
-          {/* Step 2: Budget & Style */}
-          {step === 2 && (
-            <div className="animate-fade-in">
-              <button onClick={() => setStep(1)} className="text-text-muted text-sm mb-4 flex items-center gap-1 hover:text-primary"><span className="material-symbols-outlined text-sm">arrow_back</span> 戻る</button>
-              <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
-                <span className="bg-primary/10 text-primary w-8 h-8 rounded-full flex items-center justify-center text-sm">2</span>
+          {/* 予算とスタイル */}
+          {(
+            <div className="mt-12">
+              <h2 className="text-2xl font-bold mb-6 flex items-center gap-2" style={{ fontFamily: 'var(--st-serif)' }}>
+                <span className="w-8 h-8 rounded-full flex items-center justify-center text-sm" style={{ background: 'var(--st-paper-2)', color: 'var(--st-shu)', border: '1px solid var(--st-line)' }}>二</span>
                 予算とスタイル
               </h2>
 
@@ -939,39 +975,39 @@ export const CreatePlan: React.FC<{ onNavigate: (path: string) => void }> = ({ o
                   </div>
                 </div>
 
-                <button
-                  onClick={() => setStep(3)}
-                  className="w-full bg-primary text-white py-4 rounded-xl font-bold text-lg shadow-lg hover:opacity-90 transition-all"
-                >
-                  次へ進む
-                </button>
               </div>
             </div>
           )}
 
-          {/* Step 3: Interests & Generate */}
-          {step === 3 && (
-            <div className="animate-fade-in">
-              <button onClick={() => setStep(2)} className="text-text-muted text-sm mb-4 flex items-center gap-1 hover:text-primary"><span className="material-symbols-outlined text-sm">arrow_back</span> 戻る</button>
-              <h2 className="text-2xl font-bold mb-2 flex items-center gap-2">
-                <span className="bg-primary/10 text-primary w-8 h-8 rounded-full flex items-center justify-center text-sm">3</span>
-                どんな旅にしたい？
+          {/* 趣味（8和色チップ。ランディングの趣味カードから自動で選択済みになる） */}
+          {(
+            <div className="mt-12">
+              <h2 className="text-2xl font-bold mb-2 flex items-center gap-2" style={{ fontFamily: 'var(--st-serif)' }}>
+                <span className="w-8 h-8 rounded-full flex items-center justify-center text-sm" style={{ background: 'var(--st-paper-2)', color: 'var(--st-shu)', border: '1px solid var(--st-line)' }}>三</span>
+                どんな趣味の旅にしたい？
               </h2>
-              <p className="text-text-muted mb-6 text-sm">AIがデータベースから最適なスポットを選び出します。複数選択可。</p>
+              <p className="text-text-muted mb-6 text-sm">趣味の解像度でスポットを選び出します。複数選択可。</p>
 
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-8">
-                {[
-                  'SNS映え', '歴史・文化', '食べ歩き', '自然・絶景',
-                  'アート', '温泉・癒し', '穴場スポット', '体験・アクティビティ'
-                ].map(theme => (
-                  <button
-                    key={theme}
-                    onClick={() => handleThemeToggle(theme)}
-                    className={`py-3 px-2 rounded-lg text-sm font-bold transition-all ${request.themes.includes(theme) ? 'bg-primary text-white shadow-md transform scale-105' : 'bg-gray-50 text-text-muted hover:bg-gray-100'}`}
-                  >
-                    {theme}
-                  </button>
-                ))}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
+                {(Object.keys(CATEGORY_TOKENS) as HobbyCategory[]).map(key => {
+                  const cat = CATEGORY_TOKENS[key];
+                  const selected = request.themes.includes(cat.label);
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => handleThemeToggle(cat.label)}
+                      aria-pressed={selected}
+                      className="py-3 px-2 rounded-lg text-sm font-bold transition-all flex flex-col items-center gap-1"
+                      style={selected
+                        ? { background: cat.chip, color: '#fff', border: `1px solid ${cat.chip}`, boxShadow: `0 6px 18px -8px ${cat.chip}` }
+                        : { background: 'var(--st-paper)', color: cat.text, border: '1px solid var(--st-line-strong)' }}
+                    >
+                      <CategoryGlyph category={key} size={26} strokeWidth={3} />
+                      <span className="block text-[10px] tracking-widest opacity-70">{cat.waName}</span>
+                      {cat.label}
+                    </button>
+                  );
+                })}
               </div>
 
               {/* 宿泊先情報入力セクション */}
@@ -1025,21 +1061,26 @@ export const CreatePlan: React.FC<{ onNavigate: (path: string) => void }> = ({ o
               </div>
 
 
-              <div className="bg-gradient-to-r from-secondary/20 to-primary/10 p-4 rounded-xl mb-8 flex items-start gap-3">
-                <span className="material-symbols-outlined text-primary mt-1">database</span>
-                <div className="text-sm">
-                  <span className="font-bold text-primary block mb-1">Project SatoTrip 連携</span>
-                  バックグラウンドで収集された最新のSNS・Webトレンド情報を基に、高精度なプランを作成します。
-                </div>
+              {/* いまの選択内容の要約。ここを見れば入力し直さなくても全体が分かる */}
+              <div className="p-4 rounded-xl mb-6 text-sm" style={{ background: 'var(--st-paper-2)', border: '1px solid var(--st-line)', color: 'var(--st-ink-soft)' }}>
+                <span className="font-bold" style={{ color: 'var(--st-ink)' }}>このしおり：</span>
+                {request.destination ? `${request.destination}・` : '目的地未選択・'}
+                {request.days}日間・
+                {{ budget: '節約', standard: '標準', luxury: '贅沢' }[request.budget] || request.budget}
+                {request.themes.length > 0 ? `・${request.themes.join('、')}` : '・趣味未選択（全ジャンルから提案）'}
               </div>
 
               <button
                 onClick={handleGenerate}
-                className="w-full bg-gradient-to-r from-primary to-purple-600 text-white py-4 rounded-xl font-black text-xl shadow-xl hover:opacity-90 transition-all transform hover:-translate-y-1 flex items-center justify-center gap-2"
+                disabled={!request.destination}
+                className="w-full text-white py-4 rounded-full font-bold text-lg transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                style={{ background: 'var(--st-shu)', boxShadow: '0 10px 30px -12px var(--st-shu)', fontFamily: 'var(--st-gothic)', letterSpacing: '0.06em' }}
               >
-                <span className="material-symbols-outlined">auto_awesome</span>
-                プランを生成する
+                しおりを編みはじめる →
               </button>
+              {!request.destination && (
+                <p className="text-center text-xs mt-3" style={{ color: 'var(--st-ink-soft)' }}>目的地を選ぶと生成できます（上の「一」で選択）</p>
+              )}
             </div>
           )}
         </div>
@@ -1652,8 +1693,26 @@ export const PlanDetail: React.FC<{ planId: string; onNavigate: (path: string) =
       <div className="bg-white border-b border-primary/10">
         <div className="max-w-7xl mx-auto px-4 py-8 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           <div className="flex-1">
-            <h1 className="text-4xl lg:text-5xl font-black tracking-tighter text-text-light mb-2">{plan.title}</h1>
-            <p className="text-text-muted text-lg mb-4">エリア: {plan.area}</p>
+            <div className="flex items-center gap-5 mb-2">
+              {/* 刻印済みルート紋章：この旅のスポット座標から決定的に生成（プランIDがシード） */}
+              <RouteCrest
+                state="complete"
+                seed={seedFromString(String(plan.id))}
+                points={(() => {
+                  const coords = (localPlanSpots.length > 0 ? localPlanSpots : plan.spots)
+                    .map(ps => (ps as any).spot?.location)
+                    .filter((l: any) => l && typeof l.lat === 'number' && typeof l.lng === 'number');
+                  return coords.length >= 2 ? pointsFromCoords(coords) : undefined;
+                })()}
+                size={110}
+                aria-label={`${plan.title}のルート紋章`}
+                className="shrink-0"
+              />
+              <div>
+                <h1 className="text-4xl lg:text-5xl mb-1 tracking-tight" style={{ fontFamily: 'var(--st-serif)', fontWeight: 600 }}>{plan.title}</h1>
+                <p className="text-text-muted text-lg" style={{ fontFamily: 'var(--st-gothic)' }}>{plan.area} ・ {plan.days}日間のしおり</p>
+              </div>
+            </div>
             
             {/* チェックイン日変更フォーム */}
             <div className="bg-white/50 backdrop-blur-sm rounded-lg p-4 border border-primary/20 max-w-md">
