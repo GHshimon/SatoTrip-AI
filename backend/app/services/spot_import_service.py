@@ -216,31 +216,15 @@ def parse_gemini_summary(summary_text: str) -> List[Dict[str, Any]]:
     
     try:
         summary_data = json.loads(clean_json_str)
-        # #region agent log
-        import json as json_module
-        import time
-        with open(r'c:\projects\SatoTrip-AI\.cursor\debug.log', 'a', encoding='utf-8') as f:
-            f.write(json_module.dumps({"location":"spot_import_service.py:39","message":"JSON parse succeeded","data":{"summary_type":type(summary_data).__name__,"is_dict":isinstance(summary_data, dict),"is_list":isinstance(summary_data, list),"data_preview":str(summary_data)[:200]},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"C"},ensure_ascii=False)+'\n')
-        # #endregion
         # 単一のdictの場合はリストに変換
         if isinstance(summary_data, dict):
             return [summary_data]
         elif isinstance(summary_data, list):
             return summary_data
         else:
-            # #region agent log
-            with open(r'c:\projects\SatoTrip-AI\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                f.write(json_module.dumps({"location":"spot_import_service.py:46","message":"Invalid summary format","data":{"summary_type":type(summary_data).__name__,"summary_data":str(summary_data)[:200]},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"C"},ensure_ascii=False)+'\n')
-            # #endregion
             log_error("INVALID_SUMMARY_FORMAT", f"不正な要約形式: {type(summary_data)}")
             return []
     except json.JSONDecodeError as e:
-        # #region agent log
-        import json as json_module
-        import time
-        with open(r'c:\projects\SatoTrip-AI\.cursor\debug.log', 'a', encoding='utf-8') as f:
-            f.write(json_module.dumps({"location":"spot_import_service.py:48","message":"JSON parse error","data":{"error":str(e),"error_type":type(e).__name__,"raw_summary_preview":summary_text[:500],"clean_json_preview":clean_json_str[:500]},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"C"},ensure_ascii=False)+'\n')
-        # #endregion
         # エラーログに生データを保存（SatoTrip/appと同じ方式）
         log_error(
             "JSON_PARSE_ERROR", 
@@ -376,36 +360,12 @@ def merge_spot_data(existing_spot: Spot, new_spot_data: Dict[str, Any], target_c
     # category: target_categoryが指定されている場合、既存カテゴリを保護（変更しない）
     # target_categoryが指定されていない場合も、既存カテゴリを優先
     # （既存カテゴリがない場合のみ新しいカテゴリを設定）
-    # #region agent log
-    import json
-    import time
-    with open(r'c:\projects\SatoTrip-AI\.cursor\debug.log', 'a', encoding='utf-8') as f:
-        f.write(json.dumps({"location":"spot_import_service.py:176","message":"merge_spot_data category check","data":{"existing_spot_category":existing_spot.category,"new_spot_data_category":new_spot_data.get("category"),"target_category":target_category,"target_category_type":type(target_category).__name__ if target_category else None,"target_category_bool":bool(target_category)},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"G"},ensure_ascii=False)+'\n')
-    # #endregion
     if target_category:
         # target_categoryが指定されている場合、既存カテゴリを絶対に変更しない
-        # #region agent log
-        import json
-        import time
-        with open(r'c:\projects\SatoTrip-AI\.cursor\debug.log', 'a', encoding='utf-8') as f:
-            f.write(json.dumps({"location":"spot_import_service.py:185","message":"merge_spot_data preserving existing category","data":{"existing_spot_category":existing_spot.category,"target_category":target_category},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"G"},ensure_ascii=False)+'\n')
-        # #endregion
         pass  # 既存カテゴリを維持
     elif not existing_spot.category and new_spot_data.get("category"):
         # target_categoryが指定されていない場合のみ、既存カテゴリがない場合に新しいカテゴリを設定
-        # #region agent log
-        import json
-        import time
-        with open(r'c:\projects\SatoTrip-AI\.cursor\debug.log', 'a', encoding='utf-8') as f:
-            f.write(json.dumps({"location":"spot_import_service.py:193","message":"merge_spot_data setting new category","data":{"existing_spot_category":existing_spot.category,"new_spot_data_category":new_spot_data.get("category")},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"G"},ensure_ascii=False)+'\n')
-        # #endregion
         existing_spot.category = new_spot_data["category"]
-    # #region agent log
-    import json
-    import time
-    with open(r'c:\projects\SatoTrip-AI\.cursor\debug.log', 'a', encoding='utf-8') as f:
-        f.write(json.dumps({"location":"spot_import_service.py:200","message":"merge_spot_data category after check","data":{"existing_spot_category":existing_spot.category},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"G"},ensure_ascii=False)+'\n')
-    # #endregion
     
     # rating, area等は既存を優先（変更しない）
 
@@ -503,12 +463,6 @@ def import_spots_from_youtube_data(
         "geo_filled_count": 0,
     }
     
-    # #region agent log
-    import json as json_module
-    import time
-    with open(r'c:\projects\SatoTrip-AI\.cursor\debug.log', 'a', encoding='utf-8') as f:
-        f.write(json_module.dumps({"location":"spot_import_service.py:217","message":"import_spots_from_youtube_data started","data":{"results_count":len(results),"prefecture":prefecture},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"D"},ensure_ascii=False)+'\n')
-    # #endregion
     
     for entry in results:
         summary_text = entry.get("summary", "")
@@ -619,29 +573,10 @@ def import_spots_from_youtube_data(
                 # target_categoryが指定されている場合は、spot_dataのカテゴリを上書き
                 original_category = spot_data.get("category")
                 target_category_en = None
-                # #region agent log
-                import json
-                import time
-                with open(r'c:\projects\SatoTrip-AI\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                    f.write(json.dumps({"location":"spot_import_service.py:368","message":"before category overwrite check","data":{"place_name":place_name,"original_category":original_category,"target_category":target_category,"target_category_type":type(target_category).__name__,"target_category_bool":bool(target_category)},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"F"},ensure_ascii=False)+'\n')
-                # #endregion
                 if target_category:
                     target_category_en = category_map.get(target_category, target_category)
                     spot_data["category"] = target_category_en
-                    # #region agent log
-                    import json
-                    import time
-                    with open(r'c:\projects\SatoTrip-AI\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                        f.write(json.dumps({"location":"spot_import_service.py:340","message":"category overwritten by target_category","data":{"place_name":place_name,"original_category":original_category,"target_category":target_category,"target_category_en":target_category_en,"final_category":spot_data.get("category")},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"F"},ensure_ascii=False)+'\n')
-                    # #endregion
-                else:
-                    # #region agent log
-                    import json
-                    import time
-                    with open(r'c:\projects\SatoTrip-AI\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                        f.write(json.dumps({"location":"spot_import_service.py:380","message":"target_category not provided, skipping overwrite","data":{"place_name":place_name,"original_category":original_category,"target_category":target_category},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"F"},ensure_ascii=False)+'\n')
-                    # #endregion
-                
+
                 # 重複チェック: place_id 優先、なければ name+area
                 existing_spot = find_existing_spot(db, spot_data)
 
@@ -658,10 +593,6 @@ def import_spots_from_youtube_data(
                         db.refresh(existing_spot)
                         imported_count += 1  # マージもインポートとしてカウント
                         merged_count += 1  # マージ数をカウント
-                        # #region agent log
-                        with open(r'c:\projects\SatoTrip-AI\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                            f.write(json.dumps({"location":"spot_import_service.py:350","message":"spot merged with existing","data":{"spot_name":spot_data["name"],"existing_spot_id":existing_spot.id,"existing_spot_category":existing_spot.category,"new_category":spot_data.get("category")},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"E"},ensure_ascii=False)+'\n')
-                        # #endregion
                         if existing_spot.id:
                             spot_ids.append(existing_spot.id)
                         log_debug_step(
@@ -690,12 +621,6 @@ def import_spots_from_youtube_data(
                 
                 # Spotを作成（重複が見つからなかった場合、またはカテゴリが異なる場合）
                 try:
-                    # #region agent log
-                    import json as json_module
-                    import time
-                    with open(r'c:\projects\SatoTrip-AI\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                        f.write(json_module.dumps({"location":"spot_import_service.py:425","message":"Creating new spot","data":{"spot_name":place_name,"spot_category":spot_data.get("category"),"target_category":target_category,"spot_data":{k:v for k,v in spot_data.items() if k not in ["latitude","longitude"]}},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"D"},ensure_ascii=False)+'\n')
-                    # #endregion
                     spot = Spot(
                         name=spot_data["name"],
                         description=spot_data.get("description"),
@@ -717,10 +642,6 @@ def import_spots_from_youtube_data(
                     db.add(spot)
                     db.commit()
                     db.refresh(spot)
-                    # #region agent log
-                    with open(r'c:\projects\SatoTrip-AI\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                        f.write(json_module.dumps({"location":"spot_import_service.py:520","message":"After db.commit and refresh","data":{"spot_name":place_name,"spot_id_after_commit":spot.id,"spot_id_is_none":spot.id is None},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"I"},ensure_ascii=False)+'\n')
-                    # #endregion
                     # コミット後、実際にデータベースに追加されているかを確認
                     if spot.id:
                         verified_spot = db.query(Spot).filter(Spot.id == spot.id).first()
@@ -728,10 +649,6 @@ def import_spots_from_youtube_data(
                     created_count += 1  # 新規作成数をカウント
                     if spot.id:
                         spot_ids.append(spot.id)
-                    # #region agent log
-                    with open(r'c:\projects\SatoTrip-AI\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                        f.write(json_module.dumps({"location":"spot_import_service.py:288","message":"Spot created successfully","data":{"spot_id":spot.id,"spot_name":place_name,"created_count":created_count},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"D"},ensure_ascii=False)+'\n')
-                    # #endregion
                     log_debug_step(
                         step="spot_import",
                         status="created",
@@ -744,13 +661,6 @@ def import_spots_from_youtube_data(
                     )
                 except Exception as e:
                     db.rollback()
-                    # #region agent log
-                    import json as json_module
-                    import time
-                    import traceback
-                    with open(r'c:\projects\SatoTrip-AI\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                        f.write(json_module.dumps({"location":"spot_import_service.py:348","message":"Spot creation error","data":{"spot_name":place_name,"error":str(e),"error_type":type(e).__name__,"traceback":traceback.format_exc()},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"D"},ensure_ascii=False)+'\n')
-                    # #endregion
                     log_debug_step(
                         step="spot_import",
                         status="error",
@@ -786,10 +696,6 @@ def import_spots_from_youtube_data(
         }
     )
     
-    # #region agent log
-    with open(r'c:\projects\SatoTrip-AI\.cursor\debug.log', 'a', encoding='utf-8') as f:
-        f.write(json_module.dumps({"location":"spot_import_service.py:420","message":"import_spots_from_youtube_data completed","data":{"imported":imported_count,"errors":error_count,"skipped":skipped_count,"spot_ids_count":len(result["spot_ids"])},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"D"},ensure_ascii=False)+'\n')
-    # #endregion
     
     return result
 
@@ -865,17 +771,7 @@ def add_location_to_existing_spots(
             continue
         
         # 位置情報を取得
-        # #region agent log
-        import json as json_module
-        import time
-        with open(r'c:\projects\SatoTrip-AI\.cursor\debug.log', 'a', encoding='utf-8') as f:
-            f.write(json_module.dumps({"location":"spot_import_service.py:424","message":"Getting location","data":{"spot_name":spot.name,"spot_id":spot.id,"area":spot.area,"prefecture":prefecture},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"E"},ensure_ascii=False)+'\n')
-        # #endregion
         lat, lng = get_geo(spot.name, spot.area, prefecture)
-        # #region agent log
-        with open(r'c:\projects\SatoTrip-AI\.cursor\debug.log', 'a', encoding='utf-8') as f:
-            f.write(json_module.dumps({"location":"spot_import_service.py:425","message":"Location result","data":{"spot_name":spot.name,"spot_id":spot.id,"latitude":lat,"longitude":lng,"success":bool(lat and lng)},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"E"},ensure_ascii=False)+'\n')
-        # #endregion
         if lat and lng:
             try:
                 spot.latitude = lat
@@ -925,12 +821,6 @@ def add_location_to_existing_spots(
         "total_processed": len(spots)
     }
     
-    # #region agent log
-    import json as json_module
-    import time
-    with open(r'c:\projects\SatoTrip-AI\.cursor\debug.log', 'a', encoding='utf-8') as f:
-        f.write(json_module.dumps({"location":"spot_import_service.py:531","message":"add_location_to_existing_spots completed","data":{"updated":updated_count,"errors":error_count,"skipped":skipped_count,"total_processed":len(spots)},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"E"},ensure_ascii=False)+'\n')
-    # #endregion
     
     return result
 
@@ -1002,12 +892,6 @@ def import_spots_from_sns_data(
                 # Spotデータを作成
                 spot_data = create_spot_from_data(spot_place_data, source_url)
                 
-                # #region agent log
-                import json
-                import time
-                with open(r'c:\projects\SatoTrip-AI\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                    f.write(json.dumps({"location":"spot_import_service.py:647","message":"checking duplicate before query","data":{"place_name":place_name,"spot_name":spot_data["name"],"spot_area":spot_data.get("area"),"spot_category":spot_data.get("category"),"theme":place_data.get("theme","")},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"E"},ensure_ascii=False)+'\n')
-                # #endregion
                 
                 # 重複チェック（名前とエリアで判定）
                 existing_spot = db.query(Spot).filter(
@@ -1015,10 +899,6 @@ def import_spots_from_sns_data(
                     Spot.area == spot_data["area"]
                 ).first()
                 
-                # #region agent log
-                with open(r'c:\projects\SatoTrip-AI\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                    f.write(json.dumps({"location":"spot_import_service.py:655","message":"duplicate check result","data":{"spot_name":spot_data["name"],"spot_area":spot_data.get("area"),"category":spot_data.get("category"),"existing_spot_found":existing_spot is not None,"existing_spot_id":existing_spot.id if existing_spot else None,"existing_spot_category":existing_spot.category if existing_spot else None},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"E"},ensure_ascii=False)+'\n')
-                # #endregion
                 
                 if existing_spot:
                     # CSVインポートでは常にマージする（target_categoryは使用しない）
@@ -1028,10 +908,6 @@ def import_spots_from_sns_data(
                         db.commit()
                         db.refresh(existing_spot)
                         imported_count += 1  # マージもインポートとしてカウント
-                        # #region agent log
-                        with open(r'c:\projects\SatoTrip-AI\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                            f.write(json.dumps({"location":"spot_import_service.py:662","message":"spot merged with existing","data":{"spot_name":spot_data["name"],"existing_spot_id":existing_spot.id,"existing_spot_category":existing_spot.category,"new_category":spot_data.get("category")},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"E"},ensure_ascii=False)+'\n')
-                        # #endregion
                     except Exception as e:
                         db.rollback()
                         log_error("SPOT_MERGE_ERROR", f"Spotマージエラー ({place_name}): {e}")

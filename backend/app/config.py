@@ -48,6 +48,9 @@ class Settings(BaseSettings):
     # APIキーは https://aistudio.google.com/app/apikey で取得できます
     # 本番環境では必ず設定してください
     GEMINI_API_KEY: str = ""
+    # 使用するGeminiモデル名。旧 gemini-2.0-flash 系は提供終了のため
+    # 現行モデルを既定にする（環境変数 GEMINI_MODEL で上書き可能）
+    GEMINI_MODEL: str = "gemini-2.5-flash"
 
     # YouTube Data API設定
     # APIキーは https://console.cloud.google.com/apis/credentials で取得できます
@@ -105,7 +108,42 @@ class Settings(BaseSettings):
     # development: 開発環境（デバッグ情報を表示）
     # production: 本番環境（セキュリティ強化）
     ENVIRONMENT: str = "development"
-    
+
+    # フロントエンドのベースURL（パスワードリセットのリンク生成に使用）
+    FRONTEND_URL: str = "http://localhost:3000"
+
+    # アバターアップロード設定
+    # ローカルディスク保存先（本番は S3 等に差し替え可能）。相対パスはCWD基準。
+    UPLOAD_DIR: str = "./data/uploads"
+    AVATAR_MAX_BYTES: int = 5 * 1024 * 1024  # 5MB
+
+    # Google OAuth（IDトークン検証方式）
+    # 設定時のみ /auth/google が有効。未設定なら503を返す。
+    GOOGLE_CLIENT_ID: str = ""
+
+    # Stripe決済設定
+    # 設定時のみ決済機能が有効。未設定なら503を返す。
+    STRIPE_SECRET_KEY: str = ""
+    STRIPE_PUBLISHABLE_KEY: str = ""
+    # Webhook署名検証用シークレット（stripe listen / Dashboard で取得）
+    STRIPE_WEBHOOK_SECRET: str = ""
+
+    # Redis（レート制限の共有ストア）
+    # 設定時は複数ワーカー/インスタンス間で共有されるレート制限になる。
+    # 未設定時はプロセス内メモリにフォールバック（単一ワーカー向け）。
+    REDIS_URL: str = ""
+
+    # SMTP（パスワードリセットメール送信）
+    # 未設定（SMTP_HOST が空）の場合はメール送信せず、リセットリンクをログ出力する（開発用）
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM: str = "no-reply@satotrip.example.com"
+    SMTP_USE_TLS: bool = True
+    # パスワードリセットトークンの有効期限（分）
+    PASSWORD_RESET_TOKEN_EXPIRE_MINUTES: int = 30
+
     @property
     def cors_origins_list(self) -> List[str]:
         """CORS originsをリストに変換"""

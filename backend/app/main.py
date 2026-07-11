@@ -4,9 +4,11 @@ FastAPIメインアプリケーション
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 from app.config import settings
 from app.utils.database import init_db
-from app.api import auth, plans, spots, users, data_collection, admin, hotels, folders, ai_agent, api_keys
+from app.utils.storage import ensure_upload_dir
+from app.api import auth, plans, spots, users, data_collection, admin, hotels, folders, ai_agent, api_keys, favorites, payments
 import logging
 
 # ロギング設定
@@ -52,6 +54,11 @@ app.include_router(hotels.router)
 app.include_router(folders.router)
 app.include_router(ai_agent.router)
 app.include_router(api_keys.router)
+app.include_router(favorites.router)
+app.include_router(payments.router)
+
+# アップロードされたファイル（アバター等）を /uploads で配信
+app.mount("/uploads", StaticFiles(directory=ensure_upload_dir()), name="uploads")
 
 
 # エラーハンドリング

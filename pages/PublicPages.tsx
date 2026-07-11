@@ -1,7 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { currentUser } from '../mockData';
 import { useAuth } from '../src/hooks/useAuth';
+import { useToast } from '../components/Toast';
 import * as userApi from '../src/api/users';
+import * as authApi from '../src/api/auth';
+import * as paymentApi from '../src/api/payments';
+import { getErrorMessage } from '../src/utils/errorHandler';
 
 export const Home: React.FC<{ onNavigate: (path: string) => void }> = ({ onNavigate }) => {
   return (
@@ -94,7 +98,14 @@ export const LoginPage: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
   const [isRegistering, setIsRegistering] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
   const { login: handleLogin, register: handleRegister } = useAuth();
+  const { showInfo, showSuccess, showError } = useToast();
+
+  // パスワードリセット用インラインフォームの状態
+  const [showResetForm, setShowResetForm] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [isResetSubmitting, setIsResetSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -113,6 +124,46 @@ export const LoginPage: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // パスワードリセット要求（バックエンドは常に成功を返す＝メール列挙防止）
+  const handlePasswordReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isResetSubmitting) return;
+    const trimmed = resetEmail.trim();
+    // 簡易バリデーション（未入力・不正な形式を弾く）
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      showError('有効なメールアドレスを入力してください');
+      return;
+    }
+    try {
+      setIsResetSubmitting(true);
+      await authApi.requestPasswordReset(trimmed);
+      showSuccess('パスワード再設定用のメールを送信しました。メールをご確認ください。');
+      setShowResetForm(false);
+      setResetEmail('');
+    } catch (err: any) {
+      showError(err.detail || err.message || 'パスワード再設定メールの送信に失敗しました');
+    } finally {
+      setIsResetSubmitting(false);
+    }
+  };
+
+  // Googleで続ける
+  // NOTE: Google Identity Services (GIS) SDK の読み込みと id_token の取得は未実装。
+  // VITE_GOOGLE_CLIENT_ID が設定されていれば、将来 GIS を初期化して id_token を取得し、
+  // authApi.googleLogin(idToken) を呼んでログインする（サーバー未設定時は 503）。
+  const handleGoogleLogin = () => {
+    const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+    if (!googleClientId) {
+      // クライアントIDが未設定＝正直に設定が必要な旨を案内
+      showInfo('Googleログインを利用するにはサーバー/クライアントの設定が必要です');
+      return;
+    }
+    // TODO: GIS SDK を読み込み・初期化し、id_token を取得したら
+    //       authApi.googleLogin(idToken) を呼んで onLogin() する。
+    //       SDK 統合が未完了のため、暫定的に案内を表示（無反応を避ける）。
+    showInfo('Googleログインの連携（GIS SDK）は現在準備中です');
   };
 
   return (
@@ -193,10 +244,61 @@ export const LoginPage: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
           {!isRegistering && (
             <div className="flex justify-between items-center text-sm">
               <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" className="accent-primary" />
+                <input
+                  type="checkbox"
+                  className="accent-primary"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                />
                 <span className="text-text-muted">ログイン状態を保持</span>
               </label>
-              <button type="button" className="text-primary font-bold hover:underline">パスワードを忘れた場合</button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowResetForm((prev) => !prev);
+                  // 未入力ならログイン中のユーザー名がメール形式のとき初期値として補完
+                  if (!resetEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(username)) {
+                    setResetEmail(username);
+                  }
+                }}
+                className="text-primary font-bold hover:underline"
+              >
+                パスワードを忘れた場合
+              </button>
+            </div>
+          )}
+
+          {!isRegistering && showResetForm && (
+            <div className="p-4 rounded-xl bg-gray-50 border border-gray-200 space-y-3">
+              <p className="text-sm font-bold text-text-light">パスワードの再設定</p>
+              <p className="text-xs text-text-muted">
+                ご登録のメールアドレスに、パスワード再設定用のリンクをお送りします。
+              </p>
+              <input
+                type="email"
+                value={resetEmail}
+                onChange={(e) => setResetEmail(e.target.value)}
+                placeholder="user@satotrip.com"
+                className="w-full p-3 rounded-xl bg-white border border-gray-200 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+              />
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={handlePasswordReset}
+                  disabled={isResetSubmitting}
+                  className="flex-1 bg-primary text-white py-2.5 rounded-xl font-bold hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                >
+                  {isResetSubmitting ? '送信中...' : '再設定メールを送信'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowResetForm(false)}
+                  disabled={isResetSubmitting}
+                  className="px-4 py-2.5 rounded-xl font-bold text-text-muted border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-50 transition-all"
+                >
+                  キャンセル
+                </button>
+              </div>
             </div>
           )}
 
@@ -215,6 +317,7 @@ export const LoginPage: React.FC<{ onLogin: () => void }> = ({ onLogin }) => {
 
           <button
             type="button"
+            onClick={handleGoogleLogin}
             className="w-full bg-white border border-gray-200 text-text-light py-3 rounded-xl font-bold hover:bg-gray-50 transition-all flex items-center justify-center gap-2"
           >
             <img src="https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg" className="w-5 h-5" alt="Google" />
@@ -279,12 +382,15 @@ export const NotFound: React.FC<{ onNavigate: (path: string) => void }> = ({ onN
 
 export const UserProfile: React.FC = () => {
   const { user, refreshUser } = useAuth();
+  const { showSuccess, showError } = useToast();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [avatar, setAvatar] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -293,7 +399,10 @@ export const UserProfile: React.FC = () => {
         setError(null);
         const userData = await userApi.getCurrentUser();
         setName(userData.name);
-        setEmail(userData.avatar || ''); // メールアドレスは別途取得が必要な場合があります
+        // バックエンド(PUT /api/users/me)はemail更新を受け付けるが、getCurrentUser()
+        // (src/api/users.ts) がレスポンスからemailを除いているため、現状この画面では
+        // 現在値を取得できない。avatarを入れていたコピペバグを修正し、emailから初期化する。
+        setEmail((userData as { email?: string }).email ?? '');
         setAvatar(userData.avatar || '');
       } catch (err: any) {
         console.error('Failed to fetch user:', err);
@@ -315,7 +424,13 @@ export const UserProfile: React.FC = () => {
     try {
       setIsSaving(true);
       setError(null);
-      await userApi.updateUser({ name, avatar });
+      const payload: userApi.UserUpdateRequest = { name, avatar };
+      // メールアドレスが入力されている場合のみ送信する。
+      // 空文字はバックエンドのEmailStr検証で422となり保存全体が失敗するため除外する。
+      if (email.trim()) {
+        payload.email = email.trim();
+      }
+      await userApi.updateUser(payload);
       await refreshUser();
       alert('プロフィールを更新しました');
     } catch (err: any) {
@@ -323,6 +438,29 @@ export const UserProfile: React.FC = () => {
       setError(err.detail || err.message || 'プロフィールの更新に失敗しました');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  // アバター画像アップロード
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    // 同じファイルを再選択しても onChange が発火するよう input をリセット
+    e.target.value = '';
+    if (!file || isUploadingAvatar) return;
+    try {
+      setIsUploadingAvatar(true);
+      setError(null);
+      const updatedUser = await userApi.uploadAvatar(file);
+      // 更新後の相対URLを表示用の絶対URLに変換して即時反映
+      setAvatar(updatedUser.avatar || '');
+      await refreshUser();
+      showSuccess('アイコンを更新しました');
+    } catch (err: any) {
+      console.error('Failed to upload avatar:', err);
+      // サイズ/形式エラーは detail を表示
+      showError(err.detail || err.message || 'アイコンのアップロードに失敗しました');
+    } finally {
+      setIsUploadingAvatar(false);
     }
   };
 
@@ -349,10 +487,33 @@ export const UserProfile: React.FC = () => {
       )}
       <div className="bg-white rounded-2xl p-8 shadow-sm border border-gray-100 flex flex-col md:flex-row gap-8 items-center md:items-start">
         <div className="flex-shrink-0 flex flex-col items-center gap-4">
-          <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-gray-100">
-            <img src={avatar || currentUser.avatar} alt={name || currentUser.name} className="w-full h-full object-cover" />
+          <div className="relative w-32 h-32 rounded-full overflow-hidden border-4 border-gray-100">
+            <img
+              src={userApi.resolveAvatarUrl(avatar) || currentUser.avatar}
+              alt={name || currentUser.name}
+              className="w-full h-full object-cover"
+            />
+            {isUploadingAvatar && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                <div className="w-8 h-8 border-4 border-white border-t-transparent rounded-full animate-spin"></div>
+              </div>
+            )}
           </div>
-          <button className="text-primary text-sm font-bold hover:underline">アイコンを変更</button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleAvatarChange}
+            className="hidden"
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isUploadingAvatar}
+            className="text-primary text-sm font-bold hover:underline disabled:opacity-50 disabled:cursor-not-allowed disabled:no-underline"
+          >
+            {isUploadingAvatar ? 'アップロード中...' : 'アイコンを変更'}
+          </button>
         </div>
         <div className="flex-1 w-full space-y-6">
           <div>
@@ -370,8 +531,10 @@ export const UserProfile: React.FC = () => {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              placeholder="新しいメールアドレスを入力"
               className="w-full p-3 rounded-xl bg-gray-50 border border-gray-200 text-text-light font-medium focus:bg-white focus:ring-2 focus:ring-primary"
             />
+            <p className="mt-1 text-xs text-text-muted">空欄のままにすると、現在のメールアドレスは変更されません。</p>
           </div>
           <div>
             <label className="block text-text-muted text-sm font-bold mb-1">プラン</label>
@@ -394,28 +557,334 @@ export const UserProfile: React.FC = () => {
 };
 
 export const Settings: React.FC = () => {
+  const { showSuccess, showError, showInfo } = useToast();
+
+  // 設定値（getPreferences で取得）
+  const [preferences, setPreferences] = useState<userApi.UserPreferences | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  // 通知トグルの保存中フラグ（キー単位で二重操作を抑止）
+  const [savingKey, setSavingKey] = useState<string | null>(null);
+
+  // パスワード変更フォーム
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+
+  // 決済（Stripe）
+  const [paymentConfigured, setPaymentConfigured] = useState(false);
+  const [checkoutPlan, setCheckoutPlan] = useState<string | null>(null);
+
+  useEffect(() => {
+    // 決済が有効かどうかを取得（未設定なら「準備中」表示のまま）
+    paymentApi.getPaymentConfig()
+      .then((cfg) => setPaymentConfigured(cfg.configured))
+      .catch(() => setPaymentConfigured(false));
+  }, []);
+
+  const handleUpgrade = async (planName: string) => {
+    if (checkoutPlan) return;
+    setCheckoutPlan(planName);
+    try {
+      const session = await paymentApi.createCheckout(planName);
+      // StripeのCheckoutページへ遷移
+      window.location.href = session.url;
+    } catch (err) {
+      showError(getErrorMessage(err) || '決済ページの作成に失敗しました');
+      setCheckoutPlan(null);
+    }
+  };
+
+  useEffect(() => {
+    const fetchPreferences = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+        const data = await userApi.getPreferences();
+        setPreferences(data);
+      } catch (err) {
+        console.error('Failed to fetch preferences:', err);
+        setError(getErrorMessage(err) || '設定の読み込みに失敗しました');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchPreferences();
+  }, []);
+
+  // 通知トグルの切替（楽観的更新＋失敗時ロールバック）
+  const handleToggle = async (key: 'notifications_enabled' | 'email_notifications') => {
+    if (!preferences || savingKey) return;
+    const previous = preferences;
+    const nextValue = !preferences[key];
+    setPreferences({ ...preferences, [key]: nextValue });
+    setSavingKey(key);
+    try {
+      const updated = await userApi.updatePreferences({ [key]: nextValue });
+      setPreferences(updated);
+      showSuccess('設定を保存しました');
+    } catch (err) {
+      console.error('Failed to update preferences:', err);
+      setPreferences(previous); // 楽観的更新の巻き戻し
+      showError(getErrorMessage(err) || '設定の保存に失敗しました');
+    } finally {
+      setSavingKey(null);
+    }
+  };
+
+  // 言語の変更
+  const handleLanguageChange = async (language: string) => {
+    if (!preferences || savingKey) return;
+    const previous = preferences;
+    setPreferences({ ...preferences, language });
+    setSavingKey('language');
+    try {
+      const updated = await userApi.updatePreferences({ language });
+      setPreferences(updated);
+      showSuccess('設定を保存しました');
+    } catch (err) {
+      console.error('Failed to update language:', err);
+      setPreferences(previous);
+      showError(getErrorMessage(err) || '設定の保存に失敗しました');
+    } finally {
+      setSavingKey(null);
+    }
+  };
+
+  // パスワード変更
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isChangingPassword) return;
+    // クライアント側バリデーション
+    if (newPassword !== confirmPassword) {
+      showError('新しいパスワードと確認用パスワードが一致しません');
+      return;
+    }
+    if (newPassword.length < 8) {
+      showError('新しいパスワードは8文字以上で入力してください');
+      return;
+    }
+    try {
+      setIsChangingPassword(true);
+      await userApi.changePassword(currentPassword, newPassword);
+      showSuccess('パスワードを変更しました');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (err) {
+      console.error('Failed to change password:', err);
+      showError(getErrorMessage(err) || 'パスワードの変更に失敗しました。現在のパスワードをご確認ください');
+    } finally {
+      setIsChangingPassword(false);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="max-w-4xl mx-auto px-4 py-10">
+        <div className="flex justify-center items-center min-h-[400px]">
+          <div className="text-center">
+            <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-text-muted">設定を読み込み中...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 再利用するトグルスイッチ
+  const ToggleSwitch: React.FC<{ checked: boolean; disabled?: boolean; onChange: () => void }> = ({ checked, disabled, onChange }) => (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      disabled={disabled}
+      onClick={onChange}
+      className={`relative inline-flex h-7 w-12 flex-shrink-0 items-center rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${checked ? 'bg-primary' : 'bg-gray-300'}`}
+    >
+      <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-6' : 'translate-x-1'}`} />
+    </button>
+  );
+
   return (
     <div className="max-w-4xl mx-auto px-4 py-10">
       <h1 className="text-3xl font-black mb-6">設定</h1>
-      <div className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100">
-        {[
-          { icon: 'notifications', title: '通知設定', desc: 'プランの更新やお得な情報を受け取る' },
-          { icon: 'language', title: '言語と地域', desc: '日本語 / JPY' },
-          { icon: 'lock', title: 'プライバシーとセキュリティ', desc: 'パスワードの変更、2段階認証' },
-          { icon: 'credit_card', title: 'お支払い方法', desc: 'クレジットカードの管理' },
-          { icon: 'help', title: 'ヘルプとサポート', desc: 'よくある質問、お問い合わせ' }
-        ].map((item, i) => (
-          <div key={i} className="p-6 border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer flex items-center gap-4 group">
-            <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-text-muted group-hover:bg-primary/10 group-hover:text-primary transition-colors">
-              <span className="material-symbols-outlined">{item.icon}</span>
+
+      {error && (
+        <div className="mb-6 p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm">
+          {error}
+        </div>
+      )}
+
+      {/* 通知設定 */}
+      {preferences && (
+        <div className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100 mb-6">
+          <div className="p-6 border-b border-gray-100 flex items-center gap-4">
+            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+              <span className="material-symbols-outlined">notifications</span>
             </div>
-            <div className="flex-1">
-              <h3 className="font-bold text-text-light">{item.title}</h3>
-              <p className="text-sm text-text-muted">{item.desc}</p>
-            </div>
-            <span className="material-symbols-outlined text-gray-300 group-hover:text-primary">chevron_right</span>
+            <h3 className="font-bold text-text-light">通知設定</h3>
           </div>
-        ))}
+          <div className="p-6 flex items-center justify-between">
+            <div className="flex-1 pr-4">
+              <p className="font-bold text-text-light">アプリ内通知</p>
+              <p className="text-sm text-text-muted">プランの更新やおすすめ情報をアプリ内で受け取る</p>
+            </div>
+            <ToggleSwitch
+              checked={preferences.notifications_enabled}
+              disabled={savingKey !== null}
+              onChange={() => handleToggle('notifications_enabled')}
+            />
+          </div>
+          <div className="p-6 border-t border-gray-100 flex items-center justify-between">
+            <div className="flex-1 pr-4">
+              <p className="font-bold text-text-light">メール通知</p>
+              <p className="text-sm text-text-muted">お得な情報やお知らせをメールで受け取る</p>
+            </div>
+            <ToggleSwitch
+              checked={preferences.email_notifications}
+              disabled={savingKey !== null}
+              onChange={() => handleToggle('email_notifications')}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* 言語と地域 */}
+      {preferences && (
+        <div className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100 mb-6">
+          <div className="p-6 border-b border-gray-100 flex items-center gap-4">
+            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+              <span className="material-symbols-outlined">language</span>
+            </div>
+            <h3 className="font-bold text-text-light">言語と地域</h3>
+          </div>
+          <div className="p-6">
+            <label className="block text-text-muted text-sm font-bold mb-1">言語</label>
+            <select
+              value={preferences.language}
+              disabled={savingKey !== null}
+              onChange={(e) => handleLanguageChange(e.target.value)}
+              className="w-full p-3 rounded-xl bg-gray-50 border border-gray-200 text-text-light font-medium focus:bg-white focus:ring-2 focus:ring-primary disabled:opacity-50"
+            >
+              <option value="ja">日本語</option>
+              <option value="en">English</option>
+            </select>
+            <p className="mt-2 text-xs text-text-muted">設定値を保存します。アプリの表示言語の切替は今後対応予定です。</p>
+          </div>
+        </div>
+      )}
+
+      {/* プライバシーとセキュリティ */}
+      <div className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100 mb-6">
+        <div className="p-6 border-b border-gray-100 flex items-center gap-4">
+          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+            <span className="material-symbols-outlined">lock</span>
+          </div>
+          <h3 className="font-bold text-text-light">プライバシーとセキュリティ</h3>
+        </div>
+        <form onSubmit={handleChangePassword} className="p-6 space-y-4">
+          <p className="text-sm font-bold text-text-light">パスワードの変更</p>
+          <div>
+            <label className="block text-text-muted text-sm font-bold mb-1">現在のパスワード</label>
+            <input
+              type="password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              autoComplete="current-password"
+              className="w-full p-3 rounded-xl bg-gray-50 border border-gray-200 text-text-light font-medium focus:bg-white focus:ring-2 focus:ring-primary"
+            />
+          </div>
+          <div>
+            <label className="block text-text-muted text-sm font-bold mb-1">新しいパスワード</label>
+            <input
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              autoComplete="new-password"
+              className="w-full p-3 rounded-xl bg-gray-50 border border-gray-200 text-text-light font-medium focus:bg-white focus:ring-2 focus:ring-primary"
+            />
+            <p className="mt-1 text-xs text-text-muted">8文字以上で入力してください。</p>
+          </div>
+          <div>
+            <label className="block text-text-muted text-sm font-bold mb-1">新しいパスワード（確認）</label>
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              autoComplete="new-password"
+              className="w-full p-3 rounded-xl bg-gray-50 border border-gray-200 text-text-light font-medium focus:bg-white focus:ring-2 focus:ring-primary"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={isChangingPassword}
+            className="bg-primary text-white px-6 py-3 rounded-full font-bold shadow-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
+          >
+            {isChangingPassword ? '変更中...' : 'パスワードを変更'}
+          </button>
+        </form>
+      </div>
+
+      {/* お支払い・プランのアップグレード（Stripe） */}
+      <div className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100 mb-6">
+        <div className="p-6 flex items-center gap-4 border-b border-gray-100">
+          <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-text-muted">
+            <span className="material-symbols-outlined">credit_card</span>
+          </div>
+          <div className="flex-1">
+            <h3 className="font-bold text-text-light">プランのアップグレード</h3>
+            <p className="text-sm text-text-muted">より多くのプラン生成・機能を利用できます</p>
+          </div>
+          {!paymentConfigured && (
+            <span className="text-xs bg-gray-100 text-text-muted px-2 py-1 rounded-full font-bold">準備中</span>
+          )}
+        </div>
+        {paymentConfigured ? (
+          <div className="p-6 grid gap-3 sm:grid-cols-2">
+            {[
+              { plan: 'basic', name: 'ベーシック', price: '¥980/月', desc: '月50プラン・広告なし・PDF出力' },
+              { plan: 'premium', name: 'プレミアム', price: '¥2,980/月', desc: '無制限・優先サポート・高度な最適化' },
+            ].map((p) => (
+              <div key={p.plan} className="border border-gray-200 rounded-xl p-4 flex flex-col">
+                <div className="font-bold text-text-light">{p.name}</div>
+                <div className="text-primary font-black text-lg">{p.price}</div>
+                <p className="text-xs text-text-muted flex-1 mt-1">{p.desc}</p>
+                <button
+                  type="button"
+                  onClick={() => handleUpgrade(p.plan)}
+                  disabled={checkoutPlan !== null}
+                  className="mt-3 bg-primary text-white py-2 rounded-full font-bold text-sm hover:opacity-90 transition-opacity disabled:opacity-50"
+                >
+                  {checkoutPlan === p.plan ? '処理中...' : 'アップグレード'}
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="p-6 text-sm text-text-muted">
+            オンライン決済は現在準備中です。ご利用可能になり次第、こちらからお申し込みいただけます。
+          </div>
+        )}
+      </div>
+
+      {/* ヘルプとサポート（お問い合わせページへ遷移） */}
+      <div className="bg-white rounded-2xl overflow-hidden shadow-sm border border-gray-100">
+        <button
+          type="button"
+          onClick={() => { window.location.hash = '#/contact'; }}
+          className="w-full p-6 hover:bg-gray-50 transition-colors flex items-center gap-4 group text-left"
+        >
+          <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-text-muted group-hover:bg-primary/10 group-hover:text-primary transition-colors">
+            <span className="material-symbols-outlined">help</span>
+          </div>
+          <div className="flex-1">
+            <h3 className="font-bold text-text-light">ヘルプとサポート</h3>
+            <p className="text-sm text-text-muted">よくある質問、お問い合わせ</p>
+          </div>
+          <span className="material-symbols-outlined text-gray-300 group-hover:text-primary">chevron_right</span>
+        </button>
       </div>
     </div>
   );

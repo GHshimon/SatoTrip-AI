@@ -332,12 +332,6 @@ async def bulk_add_spots_by_prefecture_endpoint(
                 error=None,
             )
 
-        # #region agent log
-        import json
-        import time
-        with open(r'c:\projects\SatoTrip-AI\.cursor\debug.log', 'a', encoding='utf-8') as f:
-            f.write(json.dumps({"location":"spots.py:301","message":"bulk_add_spots_by_prefecture called","data":{"prefecture":request.prefecture,"category":request.category,"category_type":type(request.category).__name__ if request.category else None},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"A"},ensure_ascii=False)+'\n')
-        # #endregion
         result = bulk_add_spots_by_prefecture(
             prefecture=request.prefecture,
             db=db,
@@ -347,24 +341,10 @@ async def bulk_add_spots_by_prefecture_endpoint(
             add_location=request.add_location,
             category=request.category
         )
-        # #region agent log
-        import json
-        import time
-        with open(r'c:\projects\SatoTrip-AI\.cursor\debug.log', 'a', encoding='utf-8') as f:
-            f.write(json.dumps({"location":"spots.py:153","message":"bulk_add_spots_by_prefecture result","data":{"result":result,"result_keys":list(result.keys()),"result_types":{k:type(v).__name__ for k,v in result.items()}},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"A"},ensure_ascii=False)+'\n')
-        # #endregion
         try:
             response = BulkAddResponse(**result)
-            # #region agent log
-            with open(r'c:\projects\SatoTrip-AI\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                f.write(json.dumps({"location":"spots.py:160","message":"BulkAddResponse created successfully","data":{"response_dict":response.model_dump()},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"A"},ensure_ascii=False)+'\n')
-            # #endregion
             return response
         except Exception as validation_error:
-            # #region agent log
-            with open(r'c:\projects\SatoTrip-AI\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                f.write(json.dumps({"location":"spots.py:167","message":"BulkAddResponse validation error","data":{"error":str(validation_error),"error_type":type(validation_error).__name__,"result":result},"timestamp":int(time.time()*1000),"sessionId":"debug-session","runId":"run1","hypothesisId":"A"},ensure_ascii=False)+'\n')
-            # #endregion
             raise
     except Exception as e:
         from app.utils.error_handler import log_error

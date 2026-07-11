@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Spot } from '../types';
 import * as spotApi from '../src/api/spots';
+import { useToast } from './Toast';
 
 interface SpotAddModalProps {
   isOpen: boolean;
@@ -17,11 +18,14 @@ export const SpotAddModal: React.FC<SpotAddModalProps> = ({
   area,
   existingSpotIds = new Set(),
 }) => {
+  const { showError, showWarning } = useToast();
   const [spots, setSpots] = useState<Spot[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searchKeyword, setSearchKeyword] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('');
   const [filteredArea, setFilteredArea] = useState(area || '');
+  // 競合対策: 最後に発行したリクエストのIDを保持し、最新結果のみ反映する
+  const requestIdRef = useRef(0);
 
   const categories: Array<{ value: string; label: string }> = [
     { value: '', label: 'すべて' },
@@ -45,13 +49,18 @@ export const SpotAddModal: React.FC<SpotAddModalProps> = ({
     { value: 'Drive', label: 'ドライブ' },
   ];
 
+  // 初回ロード（モーダルを開いたとき）のみ自動フェッチ。
+  // キーワード等の変更ごとの都度フェッチはやめ、検索ボタン押下時のみ検索する。
   useEffect(() => {
     if (isOpen) {
       loadSpots();
     }
-  }, [isOpen, filteredArea, selectedCategory, searchKeyword]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
 
   const loadSpots = async () => {
+    // このリクエストのIDを採番。以後、最新IDと一致する場合のみ状態を更新する。
+    const requestId = ++requestIdRef.current;
     setIsLoading(true);
     try {
       const filters: spotApi.SpotsFilters = {
@@ -61,19 +70,26 @@ export const SpotAddModal: React.FC<SpotAddModalProps> = ({
         limit: 100,
       };
       const fetchedSpots = await spotApi.getSpots(filters);
-      setSpots(fetchedSpots);
+      // 競合対策: 古いリクエストの結果で新しい結果を上書きしない
+      if (requestId === requestIdRef.current) {
+        setSpots(fetchedSpots);
+      }
     } catch (err) {
-      console.error('Failed to load spots:', err);
-      alert('スポットの取得に失敗しました');
+      if (requestId === requestIdRef.current) {
+        console.error('Failed to load spots:', err);
+        showError('スポットの取得に失敗しました');
+      }
     } finally {
-      setIsLoading(false);
+      if (requestId === requestIdRef.current) {
+        setIsLoading(false);
+      }
     }
   };
 
   const handleAddSpot = (spot: Spot) => {
     // 重複チェック
     if (existingSpotIds.has(spot.id)) {
-      alert('このスポットは既にプランに含まれています');
+      showWarning('このスポットは既にプランに含まれています');
       return;
     }
     onAddSpot(spot);

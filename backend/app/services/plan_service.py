@@ -147,7 +147,17 @@ def update_plan(db: Session, plan_id: str, user_id: str, plan_data: dict) -> Pla
     if "is_favorite" in plan_data:
         plan.is_favorite = plan_data["is_favorite"]
     if "folder_id" in plan_data:
-        plan.folder_id = plan_data["folder_id"]
+        new_folder_id = plan_data["folder_id"]
+        # 移動先フォルダを指定する場合は本人の所有物か検証する（他人のフォルダへ
+        # 割り当てられるIDORを防ぐ）。None（ルートへ移動）は許可。
+        if new_folder_id:
+            from app.services.folder_service import get_folder
+            if not get_folder(db, new_folder_id, user_id):
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="フォルダが見つかりません"
+                )
+        plan.folder_id = new_folder_id
     if "check_in_date" in plan_data:
         plan.check_in_date = plan_data["check_in_date"]
     if "check_out_date" in plan_data:

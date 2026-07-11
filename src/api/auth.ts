@@ -79,3 +79,29 @@ export async function logout(): Promise<void> {
   }
 }
 
+/**
+ * パスワードリセットを要求（登録の有無に関わらず成功扱い）
+ */
+export async function requestPasswordReset(email: string): Promise<void> {
+  await apiClient.post('/auth/password-reset/request', { email });
+}
+
+/**
+ * パスワードリセットを確定（トークン＋新パスワード）
+ */
+export async function confirmPasswordReset(token: string, newPassword: string): Promise<void> {
+  await apiClient.post('/auth/password-reset/confirm', { token, new_password: newPassword });
+}
+
+/**
+ * Googleログイン（Google Identity Services の ID トークンを送信）
+ * サーバー未設定時は 503 が返る
+ */
+export async function googleLogin(idToken: string): Promise<TokenResponse> {
+  const response = await apiClient.post<TokenResponse>('/auth/google', { id_token: idToken });
+  if (response.access_token) {
+    apiClient.setToken(response.access_token);
+  }
+  return response;
+}
+
