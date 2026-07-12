@@ -115,7 +115,14 @@ class Settings(BaseSettings):
     # 開発環境: http://localhost:3000,http://localhost:5173
     # 本番環境: 実際のフロントエンドURL
     CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173"
-    
+
+    # CORS 許可オリジンの正規表現（静的リストに加えてマッチしたオリジンも許可）。
+    # Vercel のプレビューデプロイはコミットごとにサブドメインが変わり静的リストで許可できないため、
+    # この正規表現で「自分の Vercel 組織配下の sato-trip-ai-* プレビュー」だけを許可する。
+    # 組織スラッグに限定しているため任意オリジンは通らない（第三者は同名サブドメインを作れない）。
+    # 別プロジェクト/組織へ移す場合は環境変数 CORS_ORIGIN_REGEX で上書きする。空文字で無効化。
+    CORS_ORIGIN_REGEX: str = r"^https://sato-trip-ai-[a-z0-9-]+-ghshimons-projects\.vercel\.app$"
+
     # 実行環境
     # development: 開発環境（デバッグ情報を表示）
     # production: 本番環境（セキュリティ強化）

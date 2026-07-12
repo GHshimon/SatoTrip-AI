@@ -34,6 +34,9 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
+    # Vercel プレビュー（コミットごとにサブドメインが変わる）を正規表現で許可する。
+    # 静的リスト（本番URL）に加え、これにマッチしたオリジンも許可される。
+    allow_origin_regex=settings.CORS_ORIGIN_REGEX or None,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
