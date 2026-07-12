@@ -586,6 +586,36 @@ def enrich_spot_with_places(
     if not place_id:
         return None
 
+    # コスト最適化: 要レビュー閾値未満のスコアはどのみち rejected(low_score) になり、
+    # 棄却スポットは DB 保存しない＝Details の値は使われない。Enterprise ティアの
+    # Place Details 呼び出し（無料枠 月1,000回）をここで省き、TextSearch 候補のまま返す。
+    # スコアは Details では変わらない（候補マッチングで決まる）ため誤棄却は起きない。
+    if top_score < settings.SPOT_VERIFY_REVIEW_SCORE:
+        return {
+            "place_id": place_id,
+            "name": (top.get("displayName") or {}).get("text") or name,
+            "address": top.get("formattedAddress"),
+            "latitude": None,
+            "longitude": None,
+            "phone": None,
+            "website": None,
+            "rating": None,
+            "rating_count": None,
+            "price_level": None,
+            "price_range_min": None,
+            "price_range_max": None,
+            "business_status": None,
+            "opening_hours": None,
+            "image": None,
+            "types": top.get("types") or [],
+            "primary_type": None,
+            "matched_query": matched_query,
+            "matched_score": top_score,
+            "search_attempts": search_attempts,
+            "candidate_count": candidate_count,
+            "details_called": False,
+        }
+
     details = get_place_details(place_id) or top
     details_called = True
 
