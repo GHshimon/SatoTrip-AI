@@ -206,7 +206,7 @@ async def update_spot_verification(
     レビューキューでの承認/棄却操作に使う。'/{spot_id}/verification' は2階層の
     サブパスのため、単一階層の '/{spot_id}'（GET/PUT）とはパスマッチが衝突しない。
     """
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     new_status = (payload or {}).get("status")
     allowed_statuses = ("verified", "rejected", "needs_review")
@@ -225,8 +225,8 @@ async def update_spot_verification(
 
     spot.verification_status = new_status
     if new_status == "verified":
-        # 承認時は照合成功日時として現在時刻を記録
-        spot.verified_at = datetime.now(timezone.utc)
+        # 承認時は照合成功日時として現在時刻を記録（naive。コードベースの datetime.now() に統一）
+        spot.verified_at = datetime.now()
         spot.rejected_reason = None
     elif new_status == "rejected":
         # 管理者による手動棄却

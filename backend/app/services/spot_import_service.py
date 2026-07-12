@@ -586,8 +586,36 @@ def merge_spot_data(existing_spot: Spot, new_spot_data: Dict[str, Any], target_c
     elif not existing_spot.category and new_spot_data.get("category"):
         # target_categoryが指定されていない場合のみ、既存カテゴリがない場合に新しいカテゴリを設定
         existing_spot.category = new_spot_data["category"]
-    
-    # rating, area等は既存を優先（変更しない）
+
+    # Places 由来の事実カラムは既存が空なら補完する（マージでも Phase 1 の情報を取りこぼさない）。
+    # これがないと、複数キーワードで再ヒットしてマージされたスポットや既存スポットに
+    # 営業時間・営業状態・評価件数・価格帯が永久に入らない（SPOT_FIELD_SPEC.md §1）。
+    for col in (
+        "business_status", "rating_count", "price_level",
+        "price_range_min", "price_range_max", "opening_hours",
+    ):
+        if getattr(existing_spot, col, None) is None and new_spot_data.get(col) is not None:
+            setattr(existing_spot, col, new_spot_data[col])
+    # rating は一次ソース（Places）由来のみ。既存が無いときだけ補完（捏造はしない）
+    if getattr(existing_spot, "rating", None) is None and new_spot_data.get("rating") is not None:
+        existing_spot.rating = new_spot_data["rating"]
+    # source が未設定なら記録
+    if not getattr(existing_spot, "source", None) and new_spot_data.get("source"):
+        existing_spot.source = new_spot_data["source"]
+
+    # 検証ステータスは「上げる方向のみ」更新する（下げない。設計書 §3.6）。
+    # verified へ昇格したときは照合日時・スコアも記録する。
+    _status_rank = {"rejected": 0, "unverified": 1, "needs_review": 2, "verified": 3}
+    new_status = new_spot_data.get("verification_status")
+    cur_status = getattr(existing_spot, "verification_status", None) or "unverified"
+    if new_status and _status_rank.get(new_status, 0) > _status_rank.get(cur_status, 0):
+        existing_spot.verification_status = new_status
+        if new_spot_data.get("verification_score") is not None:
+            existing_spot.verification_score = new_spot_data["verification_score"]
+        if new_status == "verified":
+            existing_spot.verified_at = datetime.now()
+
+    # area は既存を優先（変更しない）
 
 
 def create_spot_from_data(place_data: Dict[str, Any], source_url: Optional[str] = None) -> Dict[str, Any]:
@@ -831,6 +859,11 @@ def import_spots_from_youtube_data(
                         db.refresh(existing_spot)
                         imported_count += 1  # マージもインポートとしてカウント
                         merged_count += 1  # マージ数をカウント
+                        # 内訳カウントは候補の判定単位で数える（rejected と粒度を揃える）
+                        if spot_data.get("verification_status") == "verified":
+                            verified_count += 1
+                        elif spot_data.get("verification_status") == "needs_review":
+                            review_count += 1
                         if existing_spot.id:
                             spot_ids.append(existing_spot.id)
                         log_debug_step(
@@ -1181,6 +1214,11 @@ def import_spots_from_sns_data(
                         db.commit()
                         db.refresh(existing_spot)
                         imported_count += 1  # マージもインポートとしてカウント
+                        # 内訳カウントは候補の判定単位で数える（rejected と粒度を揃える）
+                        if spot_data.get("verification_status") == "verified":
+                            verified_count += 1
+                        elif spot_data.get("verification_status") == "needs_review":
+                            review_count += 1
                     except Exception as e:
                         db.rollback()
                         log_error("SPOT_MERGE_ERROR", f"Spotマージエラー ({place_name}): {e}")
