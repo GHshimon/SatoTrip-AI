@@ -57,6 +57,20 @@ def _apply_simple_migrations():
     statements = [
         "ALTER TABLE subscriptions ADD COLUMN stripe_customer_id VARCHAR",
         "ALTER TABLE subscriptions ADD COLUMN stripe_subscription_id VARCHAR",
+        # スポットの出所・検証カラム（docs/design/SPOT_FIELD_SPEC.md §2）
+        "ALTER TABLE spots ADD COLUMN source VARCHAR",
+        "ALTER TABLE spots ADD COLUMN verification_status VARCHAR DEFAULT 'unverified'",
+        "ALTER TABLE spots ADD COLUMN verified_at TIMESTAMP",
+        "ALTER TABLE spots ADD COLUMN verification_score FLOAT",
+        "ALTER TABLE spots ADD COLUMN business_status VARCHAR",
+        "ALTER TABLE spots ADD COLUMN rating_count INTEGER",
+        "ALTER TABLE spots ADD COLUMN price_level INTEGER",
+        "ALTER TABLE spots ADD COLUMN price_range_min INTEGER",
+        "ALTER TABLE spots ADD COLUMN price_range_max INTEGER",
+        "ALTER TABLE spots ADD COLUMN opening_hours JSON",
+        "ALTER TABLE spots ADD COLUMN description_source VARCHAR",
+        "ALTER TABLE spots ADD COLUMN field_provenance JSON",
+        "ALTER TABLE spots ADD COLUMN rejected_reason VARCHAR",
     ]
     for stmt in statements:
         # DDLごとに接続を分ける（失敗したトランザクションを持ち越さないため）

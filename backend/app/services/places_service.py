@@ -73,20 +73,24 @@ _DETAILS_FIELD_MASK = ",".join([
     "rating",
     "userRatingCount",
     "priceLevel",
+    "priceRange",       # 実額レンジ（Enterprise。マスクは既にEnterpriseなので追加課金なし）
     "types",
+    "primaryType",
     "photos",
     "regularOpeningHours",
+    "businessStatus",   # 営業状態（Pro。追加課金なし）。閉業検知に必須
 ])
 
-
-# Google Places の priceLevel 列挙を概算金額に変換（日本円ざっくり想定）
-_PRICE_LEVEL_TO_YEN: Dict[str, float] = {
-    "PRICE_LEVEL_FREE": 0.0,
-    "PRICE_LEVEL_INEXPENSIVE": 1000.0,
-    "PRICE_LEVEL_MODERATE": 3000.0,
-    "PRICE_LEVEL_EXPENSIVE": 8000.0,
-    "PRICE_LEVEL_VERY_EXPENSIVE": 15000.0,
+# Places priceLevel（列挙）を序数 0..4 に変換（金額ではなく価格帯の順序尺度）。
+# 旧 _PRICE_LEVEL_TO_YEN による円換算は「Googleが言っていない金額の捏造」になるため廃止。
+_PRICE_LEVEL_TO_ORDINAL: Dict[str, int] = {
+    "PRICE_LEVEL_FREE": 0,
+    "PRICE_LEVEL_INEXPENSIVE": 1,
+    "PRICE_LEVEL_MODERATE": 2,
+    "PRICE_LEVEL_EXPENSIVE": 3,
+    "PRICE_LEVEL_VERY_EXPENSIVE": 4,
 }
+
 
 # 都道府県ごとの検索制限（B1: locationRestriction）
 # 必要になったら順次追加
@@ -593,9 +597,17 @@ def enrich_spot_with_places(
     website = details.get("websiteUri")
 
     rating = details.get("rating")
+    rating_count = details.get("userRatingCount")
 
-    price_level = details.get("priceLevel")
-    price_yen = _PRICE_LEVEL_TO_YEN.get(price_level) if isinstance(price_level, str) else None
+    # priceLevel は序数（金額ではない）。実額が要るときは priceRange から取得。
+    price_level_enum = details.get("priceLevel")
+    price_level = _PRICE_LEVEL_TO_ORDINAL.get(price_level_enum) if isinstance(price_level_enum, str) else None
+    price_range = details.get("priceRange") or {}
+    price_range_min = _coerce_price_amount(price_range.get("startPrice"))
+    price_range_max = _coerce_price_amount(price_range.get("endPrice"))
+
+    business_status = details.get("businessStatus")
+    opening_hours = details.get("regularOpeningHours")
 
     image_url: Optional[str] = None
     photos = details.get("photos") or []
@@ -614,12 +626,66 @@ def enrich_spot_with_places(
         "phone": phone,
         "website": website,
         "rating": float(rating) if rating is not None else None,
-        "price": price_yen,
+        "rating_count": int(rating_count) if isinstance(rating_count, (int, float)) else None,
+        "price_level": price_level,
+        "price_range_min": price_range_min,
+        "price_range_max": price_range_max,
+        "business_status": business_status,
+        "opening_hours": opening_hours,
         "image": image_url,
         "types": details.get("types") or [],
+        "primary_type": details.get("primaryType"),
         "matched_query": matched_query,
         "matched_score": top_score,
         "search_attempts": search_attempts,
         "candidate_count": candidate_count,
         "details_called": details_called,
     }
+
+
+def _coerce_price_amount(price_obj: Any) -> Optional[int]:
+    """Places priceRange の Money オブジェクト（{units, currencyCode}）から円の整数を取り出す。
+
+    通貨が JPY 以外、または units が無い場合は None（換算の推測はしない）。
+    """
+    if not isinstance(price_obj, dict):
+        return None
+    currency = price_obj.get("currencyCode")
+    if currency and currency != "JPY":
+        return None
+    units = price_obj.get("units")
+    if units is None:
+        return None
+    try:
+        return int(units)
+    except (TypeError, ValueError):
+        return None
+
+
+def get_place_business_status(place_id: str) -> Optional[str]:
+    """定期再検証用に営業状態だけを最小フィールドマスクで取得する（コスト最小化）。
+
+    field mask を ``id,businessStatus`` に絞ることで Details のティアを下げ、
+    定期ジョブの Places コストを大幅に抑える（docs/design/SPOT_FIELD_SPEC.md §3）。
+    戻り値は 'OPERATIONAL'|'CLOSED_TEMPORARILY'|'CLOSED_PERMANENTLY'、取得失敗時は None。
+    """
+    api_key = _api_key_or_none()
+    if api_key is None or not place_id:
+        return None
+
+    headers = {
+        "X-Goog-Api-Key": api_key,
+        "X-Goog-FieldMask": "id,businessStatus",
+    }
+    try:
+        res = requests.get(
+            PLACES_DETAILS_URL.format(place_id=place_id),
+            headers=headers,
+            params={"regionCode": settings.PLACES_REGION},
+            timeout=settings.PLACES_API_TIMEOUT_SEC,
+        )
+        if res.status_code != 200:
+            return None
+        return (res.json() or {}).get("businessStatus")
+    except Exception:
+        return None

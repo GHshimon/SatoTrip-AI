@@ -147,6 +147,10 @@ export interface BulkAddResponse {
   total_videos: number;
   location_updated?: number;
   location_errors?: number;
+  // 3値検証（verify_spot_candidate）の内訳
+  verified_count?: number;
+  needs_review_count?: number;
+  rejected_count?: number;
   places_search_count?: number;
   places_hit_count?: number;
   places_miss_count?: number;
@@ -279,9 +283,18 @@ export function transformSpotResponse(data: any): Spot {
     address: data.address || undefined,
     category: data.category as any || 'Culture',
     durationMinutes: data.duration_minutes || 60,
-    rating: data.rating || 0,
+    // Places由来のみ。未取得は null（0埋めしない）
+    rating: data.rating ?? null,
+    ratingCount: data.rating_count ?? null,
     image: data.image || '',
     price: data.price,
+    priceLevel: data.price_level ?? null,
+    priceRangeMin: data.price_range_min ?? null,
+    priceRangeMax: data.price_range_max ?? null,
+    businessStatus: data.business_status ?? null,
+    openingHours: data.opening_hours ?? null,
+    descriptionSource: data.description_source ?? null,
+    verificationStatus: data.verification_status ?? null,
     tags: normalizeTagsArray(data.tags),
     location: data.latitude && data.longitude
       ? { lat: data.latitude, lng: data.longitude }

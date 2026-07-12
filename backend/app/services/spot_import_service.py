@@ -34,6 +34,197 @@ def _coerce_float(value: Any) -> Optional[float]:
         return None
 
 
+def _coords_in_prefecture(
+    lat: Optional[float], lng: Optional[float], prefecture: Optional[str]
+) -> Optional[bool]:
+    """
+    座標が都道府県境界（places_service._PREFECTURE_BOUNDS）内かを判定する。
+
+    戻り: True=境界内 / False=境界外 / None=判定不能（県不明・座標なし・境界未登録）。
+    None のときは呼び出し側で「判定できない」として扱う。
+    """
+    if not prefecture or lat is None or lng is None:
+        return None
+    try:
+        from app.services.places_service import _PREFECTURE_BOUNDS
+    except Exception:
+        return None
+    b = _PREFECTURE_BOUNDS.get(prefecture)
+    if not b:
+        return None
+    return (b["lat_min"] <= lat <= b["lat_max"]) and (b["lng_min"] <= lng <= b["lng_max"])
+
+
+def verify_spot_candidate(
+    places_info: Optional[Dict[str, Any]], prefecture: Optional[str]
+) -> Dict[str, Any]:
+    """
+    Places 照合結果から候補スポットを3値判定する（設計書 SPOT_DATA_QUALITY.md §5）。
+
+    判定順:
+      1. Places 未ヒット → rejected(no_places_hit)
+      2. business_status == CLOSED_PERMANENTLY → rejected(closed)
+      3. matched_score >= 自動合格閾値 かつ business_status in (None, OPERATIONAL)
+         かつ 座標が県境界内（県が分かる場合のみ。不明ならこの条件はスキップ） → verified
+      4. matched_score >= 要レビュー閾値 / CLOSED_TEMPORARILY / 座標が県境界外 → needs_review
+      5. matched_score < 要レビュー閾値 → rejected(low_score)
+
+    戻り: {"status", "score", "business_status", "reason"}
+    """
+    if not places_info:
+        return {
+            "status": "rejected",
+            "score": None,
+            "business_status": None,
+            "reason": "no_places_hit",
+        }
+
+    business_status = places_info.get("business_status")
+    score = _coerce_float(places_info.get("matched_score"))
+
+    # 恒久閉業は自動棄却（掲載＝誤情報になる）
+    if business_status == "CLOSED_PERMANENTLY":
+        return {
+            "status": "rejected",
+            "score": score,
+            "business_status": business_status,
+            "reason": "closed",
+        }
+
+    lat = _coerce_float(places_info.get("latitude"))
+    lng = _coerce_float(places_info.get("longitude"))
+    # True=境界内 / False=境界外 / None=判定不能
+    in_bounds = _coords_in_prefecture(lat, lng, prefecture)
+
+    auto_pass = settings.SPOT_VERIFY_AUTO_PASS_SCORE
+    review = settings.SPOT_VERIFY_REVIEW_SCORE
+
+    # 自動合格: 高スコア AND 営業中(またはstatus不明) AND 県境界外でない
+    if (
+        score is not None
+        and score >= auto_pass
+        and business_status in (None, "OPERATIONAL")
+        and in_bounds is not False
+    ):
+        return {
+            "status": "verified",
+            "score": score,
+            "business_status": business_status,
+            "reason": None,
+        }
+
+    # 要レビュー: 中スコア / 一時閉業 / 県境界外
+    if (
+        (score is not None and score >= review)
+        or business_status == "CLOSED_TEMPORARILY"
+        or in_bounds is False
+    ):
+        reason = None
+        if in_bounds is False:
+            reason = "out_of_bounds"
+        elif business_status == "CLOSED_TEMPORARILY":
+            reason = "temporarily_closed"
+        return {
+            "status": "needs_review",
+            "score": score,
+            "business_status": business_status,
+            "reason": reason,
+        }
+
+    # 低スコアは自動棄却
+    return {
+        "status": "rejected",
+        "score": score,
+        "business_status": business_status,
+        "reason": "low_score",
+    }
+
+
+# description に書いてはいけない検証不能な事実断定（設計書 SPOT_FIELD_SPEC.md §4）。
+# 受賞・格付け／最上級・序列／由来断定／数値的事実を対象にする簡易フィルタ用パターン。
+_DESCRIPTION_NG_PATTERNS = [
+    r"ミシュラン",
+    r"三ツ星",
+    r"三つ星",
+    r"星付き",
+    r"受賞",
+    # 「◯◯賞」（鑑賞・観賞などの一般語は除外）
+    r"(?<![鑑観])賞",
+    # 最上級・序列
+    r"日本一",
+    r"世界一",
+    r"県内一",
+    r"[Nn][Oo]\.?\s*1",
+    r"ナンバーワン",
+    r"行列必至",
+    # 由来・歴史断定
+    r"元祖",
+    r"発祥",
+    r"創業",
+    r"名物",
+    # 数値的事実（年間◯万人・◯席 など）
+    r"年間[0-9０-９〇一二三四五六七八九十百千万]+",
+    r"[0-9０-９〇一二三四五六七八九十百千万]+\s*席",
+]
+
+
+def _contains_description_ng_word(text: str) -> bool:
+    """文中に NG ワードが含まれるか"""
+    for pattern in _DESCRIPTION_NG_PATTERNS:
+        if re.search(pattern, text):
+            return True
+    return False
+
+
+def filter_description_ng_words(description: Optional[str]) -> Optional[str]:
+    """
+    保存前の description から NG ワードを含む文を除去する簡易フィルタ（設計書 §4）。
+
+    句点（。！!？?）区切りで文に分割し、NG ワードを含む文だけを落として再結合する。
+    残る文が無ければ None を返す。
+    """
+    if not description:
+        return description
+    text = description.strip()
+    if not text:
+        return None
+    # 区切り文字を保持したまま文分割
+    sentences = re.split(r"(?<=[。！!？?])", text)
+    kept: List[str] = []
+    for sentence in sentences:
+        if not sentence.strip():
+            continue
+        if _contains_description_ng_word(sentence):
+            continue
+        kept.append(sentence)
+    result = "".join(kept).strip()
+    return result or None
+
+
+def _build_verification_columns(spot_data: Dict[str, Any], source: str) -> Dict[str, Any]:
+    """
+    enrich 済み spot_data から Spot 構築用の検証系カラム値をまとめる。
+
+    verified のときのみ verified_at に現在時刻を入れる。
+    """
+    status = spot_data.get("verification_status") or "unverified"
+    verified_at = datetime.now() if status == "verified" else None
+    return {
+        "source": source,
+        "verification_status": status,
+        "verification_score": spot_data.get("verification_score"),
+        "verified_at": verified_at,
+        "business_status": spot_data.get("business_status"),
+        "rating_count": spot_data.get("rating_count"),
+        "price_level": spot_data.get("price_level"),
+        "price_range_min": spot_data.get("price_range_min"),
+        "price_range_max": spot_data.get("price_range_max"),
+        "opening_hours": spot_data.get("opening_hours"),
+        "description_source": spot_data.get("description_source"),
+        "rejected_reason": spot_data.get("rejected_reason"),
+    }
+
+
 def enrich_spot_data(
     spot_data: Dict[str, Any],
     *,
@@ -42,12 +233,14 @@ def enrich_spot_data(
     metrics: Optional[Dict[str, int]] = None,
 ) -> Dict[str, Any]:
     """
-    動画由来の粗い spot_data を Gemini + Places で補強する。
+    動画由来の粗い spot_data を Places（一次ソース）+ Gemini（非事実系）で補強する。
 
-    優先度:
-      1. Google Places の住所/緯度経度/画像/電話/サイト/レーティング/place_id
-      2. Gemini research_spot_info の description / tags / category / duration / address(補)
-      3. 動画由来の値（description/tags/items/recommend など）
+    設計方針（SPOT_DATA_QUALITY.md §3 / SPOT_FIELD_SPEC.md §1）:
+      - 事実フィールド（place_id/住所/緯度経度/電話/サイト/rating/営業情報/価格）は Places のみ。
+      - Gemini から採用してよいのは description/category/duration_minutes/tags/area(分類補助) のみ。
+        AI 由来の住所・価格・座標は保存しない。
+      - Places を先行させ、未ヒット候補（後段で棄却）には AI エンリッチを行わずコストを抑える。
+      - 最後に verify_spot_candidate で3値判定し、検証情報を enriched に載せる。
 
     引数の ``spot_data`` は破壊的に書き換えず、コピーを返す。
     """
@@ -57,58 +250,13 @@ def enrich_spot_data(
     if not name:
         return enriched
 
-    area = enriched.get("area") or ""
     pref = prefecture or ""
 
-    # 1) Gemini で店舗単位の説明・タグ・カテゴリ・滞在時間を補強
-    if settings.SPOT_ENRICH_WITH_GEMINI and settings.GEMINI_API_KEY:
-        if metrics is not None:
-            metrics["gemini_enrich_call_count"] = metrics.get("gemini_enrich_call_count", 0) + 1
-        try:
-            from app.services.gemini_service import research_spot_info
+    places_info: Optional[Dict[str, Any]] = None
+    places_enabled = bool(settings.SPOT_ENRICH_WITH_PLACES and settings.GOOGLE_MAPS_API_KEY)
 
-            research = research_spot_info(name, area=area, prefecture=pref)
-            if research and not research.get("error"):
-                research_desc = (research.get("description") or "").strip()
-                if research_desc:
-                    enriched["description"] = research_desc[:_DESCRIPTION_MAX_LEN]
-
-                research_category = research.get("category")
-                if research_category and not enriched.get("category"):
-                    enriched["category"] = research_category
-
-                research_duration = research.get("duration_minutes")
-                if isinstance(research_duration, (int, float)) and research_duration > 0:
-                    enriched["duration_minutes"] = int(research_duration)
-
-                research_tags = research.get("tags")
-                if research_tags:
-                    enriched["tags"] = research_tags
-
-                research_address = (research.get("address") or "").strip()
-                if research_address:
-                    enriched["address"] = research_address
-
-                research_area = (research.get("area") or "").strip()
-                if research_area and not enriched.get("area"):
-                    enriched["area"] = research_area
-
-                research_price = research.get("price")
-                if isinstance(research_price, (int, float)) and research_price > 0 and not enriched.get("price"):
-                    enriched["price"] = float(research_price)
-            elif research and research.get("error"):
-                log_error(
-                    "SPOT_ENRICH_GEMINI_ERROR",
-                    f"research_spot_info エラー ({name}): {research.get('message')}",
-                    {"name": name, "error_type": research.get("error_type")},
-                )
-        except Exception as e:
-            log_error("SPOT_ENRICH_GEMINI_EXCEPTION", f"Gemini エンリッチ例外 ({name}): {e}")
-        if settings.SPOT_ENRICH_DELAY_SEC:
-            time.sleep(settings.SPOT_ENRICH_DELAY_SEC)
-
-    # 2) Google Places で住所・緯度経度・画像・電話・URL を取得して優先反映
-    if settings.SPOT_ENRICH_WITH_PLACES and settings.GOOGLE_MAPS_API_KEY:
+    # 1) Google Places を先行（事実フィールドの一次ソース）
+    if places_enabled:
         try:
             from app.services.places_service import enrich_spot_with_places
 
@@ -140,10 +288,21 @@ def enrich_spot_data(
                     enriched["phone"] = places_info["phone"]
                 if places_info.get("website"):
                     enriched["website"] = places_info["website"]
-                if places_info.get("rating") is not None:
-                    enriched["rating"] = float(places_info["rating"])
-                if places_info.get("price") is not None and not enriched.get("price"):
-                    enriched["price"] = float(places_info["price"])
+                # rating は Places 由来のみ（件数とセット）。無ければ None（一律デフォルト値は付けない）
+                enriched["rating"] = _coerce_float(places_info.get("rating"))
+                if places_info.get("rating_count") is not None:
+                    enriched["rating_count"] = int(places_info["rating_count"])
+                # 価格は序数 price_level と実額 price_range のみ保存（旧 price=金額への書込はしない）
+                if places_info.get("price_level") is not None:
+                    enriched["price_level"] = places_info["price_level"]
+                if places_info.get("price_range_min") is not None:
+                    enriched["price_range_min"] = places_info["price_range_min"]
+                if places_info.get("price_range_max") is not None:
+                    enriched["price_range_max"] = places_info["price_range_max"]
+                if places_info.get("business_status"):
+                    enriched["business_status"] = places_info["business_status"]
+                if places_info.get("opening_hours") is not None:
+                    enriched["opening_hours"] = places_info["opening_hours"]
                 if places_info.get("image") and not enriched.get("image"):
                     enriched["image"] = places_info["image"]
                 # Places の正規名称が大きく違う場合は採用しない（誤同定防止）
@@ -156,7 +315,68 @@ def enrich_spot_data(
         if settings.SPOT_ENRICH_DELAY_SEC:
             time.sleep(settings.SPOT_ENRICH_DELAY_SEC)
 
-    # 3) ソース動画情報を保持
+    # 2) Gemini で非事実系（description/category/duration/tags/area分類補助）を補強
+    #    Places 有効時は未ヒット候補（後段で棄却）に AI 呼び出しを行わずコストを抑える。
+    run_ai = bool(settings.SPOT_ENRICH_WITH_GEMINI and settings.GEMINI_API_KEY)
+    if places_enabled and not places_info:
+        run_ai = False
+    if run_ai:
+        if metrics is not None:
+            metrics["gemini_enrich_call_count"] = metrics.get("gemini_enrich_call_count", 0) + 1
+        try:
+            from app.services.gemini_service import research_spot_info
+
+            research = research_spot_info(name, area=enriched.get("area") or "", prefecture=pref)
+            if research and not research.get("error"):
+                research_desc = (research.get("description") or "").strip()
+                if research_desc:
+                    # NG ワードを含む文を除去してから採用し、AI 生成であることを記録
+                    filtered_desc = filter_description_ng_words(research_desc[:_DESCRIPTION_MAX_LEN])
+                    if filtered_desc:
+                        enriched["description"] = filtered_desc
+                        enriched["description_source"] = "ai"
+
+                research_category = research.get("category")
+                if research_category and not enriched.get("category"):
+                    enriched["category"] = research_category
+
+                research_duration = research.get("duration_minutes")
+                if isinstance(research_duration, (int, float)) and research_duration > 0:
+                    enriched["duration_minutes"] = int(research_duration)
+
+                research_tags = research.get("tags")
+                if research_tags:
+                    enriched["tags"] = research_tags
+
+                research_area = (research.get("area") or "").strip()
+                if research_area and not enriched.get("area"):
+                    enriched["area"] = research_area
+
+                # 住所・価格は AI から採用しない（一次ソース限定。SPOT_FIELD_SPEC.md §4）
+            elif research and research.get("error"):
+                log_error(
+                    "SPOT_ENRICH_GEMINI_ERROR",
+                    f"research_spot_info エラー ({name}): {research.get('message')}",
+                    {"name": name, "error_type": research.get("error_type")},
+                )
+        except Exception as e:
+            log_error("SPOT_ENRICH_GEMINI_EXCEPTION", f"Gemini エンリッチ例外 ({name}): {e}")
+        if settings.SPOT_ENRICH_DELAY_SEC:
+            time.sleep(settings.SPOT_ENRICH_DELAY_SEC)
+
+    # 3) 3値判定（設計書 §5）。呼び出し側が Spot 構築時に保存できるよう enriched に載せる。
+    verification = verify_spot_candidate(places_info, pref or None)
+    enriched["verification_status"] = verification["status"]
+    enriched["verification_score"] = verification["score"]
+    if verification.get("business_status") is not None:
+        enriched["business_status"] = verification["business_status"]
+    enriched["rejected_reason"] = (
+        verification["reason"] if verification["status"] == "rejected" else None
+    )
+    # verify に渡した Places 情報も保持（呼び出し側の参照用）
+    enriched["_places_info"] = places_info
+
+    # 4) ソース動画情報を保持
     if source_video:
         existing_videos = enriched.get("source_videos") or []
         if not isinstance(existing_videos, list):
@@ -418,8 +638,8 @@ def create_spot_from_data(place_data: Dict[str, Any], source_url: Optional[str] 
         "description": description,
         "area": area,
         "category": category,
-        "duration_minutes": 60,  # デフォルト値
-        "rating": 4.0,  # デフォルト値
+        "duration_minutes": 60,  # 所要時間の目安（カテゴリ別の実値は enrich で上書き）
+        "rating": None,  # rating は Places 由来のみ。一律デフォルト値は付けない（景表法対応）
         "image": "",  # 後で設定可能
         "price": None,
         "tags": tags,
@@ -453,6 +673,9 @@ def import_spots_from_youtube_data(
     merged_count = 0   # マージ数
     error_count = 0
     skipped_count = 0
+    rejected_count = 0  # Places 照合で棄却した数（保存しない）
+    review_count = 0    # 要レビューで保存した数
+    verified_count = 0  # 自動合格で保存した数
     spot_ids: List[str] = []
     kpi_metrics: Dict[str, int] = {
         "places_search_count": 0,
@@ -543,13 +766,28 @@ def import_spots_from_youtube_data(
                     "imported_at": datetime.now().isoformat(),
                 }
 
-                # Gemini + Places で店舗単位に補強（精度の高い情報で上書き）
+                # Places 先行 + Gemini で店舗単位に補強し、3値判定を付与
                 spot_data = enrich_spot_data(
                     spot_data,
                     prefecture=prefecture,
                     source_video=source_video,
                     metrics=kpi_metrics,
                 )
+
+                # rejected（Places未ヒット/低スコア/恒久閉業）は保存しない（設計書 §5）。
+                # 公開されないことを保証するため DB へ入れずスキップ。
+                if spot_data.get("verification_status") == "rejected":
+                    rejected_count += 1
+                    log_debug_step(
+                        step="spot_import",
+                        status="rejected",
+                        data={
+                            "spot_name": place_name,
+                            "reason": spot_data.get("rejected_reason"),
+                            "area": spot_data.get("area", ""),
+                        },
+                    )
+                    continue
 
                 # カテゴリマッピング: 日本語カテゴリ名を英語カテゴリ名に変換
                 category_map = {
@@ -638,6 +876,7 @@ def import_spots_from_youtube_data(
                         phone=spot_data.get("phone"),
                         website=spot_data.get("website"),
                         source_videos=spot_data.get("source_videos"),
+                        **_build_verification_columns(spot_data, "youtube"),
                     )
                     db.add(spot)
                     db.commit()
@@ -647,6 +886,10 @@ def import_spots_from_youtube_data(
                         verified_spot = db.query(Spot).filter(Spot.id == spot.id).first()
                     imported_count += 1
                     created_count += 1  # 新規作成数をカウント
+                    if spot_data.get("verification_status") == "verified":
+                        verified_count += 1
+                    elif spot_data.get("verification_status") == "needs_review":
+                        review_count += 1
                     if spot.id:
                         spot_ids.append(spot.id)
                     log_debug_step(
@@ -679,6 +922,9 @@ def import_spots_from_youtube_data(
         "merged": merged_count,    # マージ数
         "errors": error_count,
         "skipped": skipped_count,
+        "rejected": rejected_count,      # Places 照合で棄却（DB保存せず）
+        "verified": verified_count,      # 自動合格で保存
+        "needs_review": review_count,    # 要レビューで保存（非公開）
         "total_processed": len(results),
         "spot_ids": list(set(spot_ids)),
         **kpi_metrics,
@@ -845,11 +1091,22 @@ def import_spots_from_sns_data(
     imported_count = 0
     error_count = 0
     skipped_count = 0
-    
+    rejected_count = 0  # Places 照合で棄却した数（保存しない）
+    review_count = 0    # 要レビューで保存した数
+    verified_count = 0  # 自動合格で保存した数
+    kpi_metrics: Dict[str, int] = {
+        "places_search_count": 0,
+        "places_hit_count": 0,
+        "places_miss_count": 0,
+        "details_call_count": 0,
+        "gemini_enrich_call_count": 0,
+        "geo_filled_count": 0,
+    }
+
     for entry in results:
         summary_text = entry.get("summary", "")
         source_url = entry.get("link", "")
-        
+
         if not summary_text:
             skipped_count += 1
             continue
@@ -891,18 +1148,34 @@ def import_spots_from_sns_data(
                 
                 # Spotデータを作成
                 spot_data = create_spot_from_data(spot_place_data, source_url)
-                
-                
-                # 重複チェック（名前とエリアで判定）
-                existing_spot = db.query(Spot).filter(
-                    Spot.name == spot_data["name"],
-                    Spot.area == spot_data["area"]
-                ).first()
-                
-                
+
+                # 記事情報をソースとして保持
+                source_article = {
+                    "url": source_url,
+                    "title": entry.get("title", ""),
+                    "keyword": entry.get("keyword"),
+                    "imported_at": datetime.now().isoformat(),
+                }
+
+                # YouTube 経路と同様に Places 先行 + Gemini で補強し、3値判定を通す
+                # （従来この経路は enrich を通らず素通しだった）
+                spot_data = enrich_spot_data(
+                    spot_data,
+                    prefecture=prefecture,
+                    source_video=source_article,
+                    metrics=kpi_metrics,
+                )
+
+                # rejected は保存しない（設計書 §5。公開されないことを保証）
+                if spot_data.get("verification_status") == "rejected":
+                    rejected_count += 1
+                    continue
+
+                # 重複チェック: place_id 優先、なければ name+area（find_existing_spot に統一）
+                existing_spot = find_existing_spot(db, spot_data)
+
                 if existing_spot:
-                    # CSVインポートでは常にマージする（target_categoryは使用しない）
-                    # 重複が見つかった場合、マージする
+                    # 重複が見つかった場合、マージする（target_category は使用しない）
                     try:
                         merge_spot_data(existing_spot, spot_data, target_category=None)
                         db.commit()
@@ -913,13 +1186,14 @@ def import_spots_from_sns_data(
                         log_error("SPOT_MERGE_ERROR", f"Spotマージエラー ({place_name}): {e}")
                         error_count += 1
                     continue
-                
+
                 # Spotを作成
                 try:
                     spot = Spot(
                         name=spot_data["name"],
                         description=spot_data.get("description"),
                         area=spot_data.get("area"),
+                        address=spot_data.get("address"),
                         category=spot_data.get("category"),
                         duration_minutes=spot_data.get("duration_minutes"),
                         rating=spot_data.get("rating"),
@@ -927,12 +1201,21 @@ def import_spots_from_sns_data(
                         price=spot_data.get("price"),
                         tags=spot_data.get("tags"),
                         latitude=spot_data.get("latitude"),
-                        longitude=spot_data.get("longitude")
+                        longitude=spot_data.get("longitude"),
+                        place_id=spot_data.get("place_id"),
+                        phone=spot_data.get("phone"),
+                        website=spot_data.get("website"),
+                        source_videos=spot_data.get("source_videos"),
+                        **_build_verification_columns(spot_data, "sns"),
                     )
                     db.add(spot)
                     db.commit()
                     db.refresh(spot)
                     imported_count += 1
+                    if spot_data.get("verification_status") == "verified":
+                        verified_count += 1
+                    elif spot_data.get("verification_status") == "needs_review":
+                        review_count += 1
                 except Exception as e:
                     db.rollback()
                     log_error("SPOT_CREATE_ERROR", f"Spot作成エラー ({place_name}): {e}")
@@ -941,12 +1224,16 @@ def import_spots_from_sns_data(
         # このエントリでplacesが見つからなかった場合、スキップとしてカウント
         if not places_found_in_entry:
             skipped_count += 1
-    
+
     return {
         "imported": imported_count,
         "errors": error_count,
         "skipped": skipped_count,
-        "total_processed": len(results)
+        "rejected": rejected_count,      # Places 照合で棄却（DB保存せず）
+        "verified": verified_count,      # 自動合格で保存
+        "needs_review": review_count,    # 要レビューで保存（非公開）
+        "total_processed": len(results),
+        **kpi_metrics,
     }
 
 
@@ -1203,13 +1490,15 @@ def import_spots_from_csv_file(
                         description=description if description else None,
                         area=area,
                         category=mapped_category,
-                        duration_minutes=60,  # デフォルト値
-                        rating=4.0,  # デフォルト値
+                        duration_minutes=60,  # 所要時間の目安（デフォルト）
+                        rating=None,  # rating は Places 由来のみ。一律デフォルト値は付けない（景表法対応）
                         image=image_url if image_url else None,
                         price=price,
                         tags=tags,
                         latitude=latitude,
-                        longitude=longitude
+                        longitude=longitude,
+                        # CSV は Places 照合を通さないため未検証扱い（verification_status は既定の unverified）
+                        source="csv",
                     )
                     
                     # 日時を設定（手動で設定する場合）

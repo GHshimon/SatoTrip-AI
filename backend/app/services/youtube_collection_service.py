@@ -124,11 +124,15 @@ def get_youtube_videos(keyword: str, max_results: int = 5) -> tuple[List[Dict[st
 
 
 def summarize_with_gemini(video_title: str, video_url: str) -> Optional[str]:
-    """Geminiで動画を構造化要約（マップ化対応）"""
+    """Geminiで動画を構造化要約（マップ化対応）
+
+    注意: 入力は動画タイトル文字列のみ。ここで得られる店名・エリアは未検証の候補であり、
+    緯度経度などの事実は生成させない（座標は後段の Places / geocoding を正とし、AI 推定は保存しない）。
+    """
     if not settings.GEMINI_API_KEY:
         log_error("GEMINI_API_KEY_NOT_SET", "GEMINI_API_KEYが設定されていません")
         return None
-    
+
     prompt = f"""
 以下のYouTube動画の内容を、観光地・グルメ情報として構造的に要約してください。
 
@@ -143,7 +147,7 @@ def summarize_with_gemini(video_title: str, video_url: str) -> Optional[str]:
 ■ 登場する商品・料理名・名物（動画内で紹介されたもの）
 ■ おすすめポイント（100文字以内、旅行者目線）
 ■ 雰囲気（例: 癒やし / 活気 / 美味しそう / 歴史的）
-■ 推定緯度経度（分からなければ "不明" と記載）
+※ 緯度経度・住所などの事実情報は推測して出力しないでください（別途一次ソースから取得します）。
 ■ JSON出力例:
 {{
   "theme": "グルメ",
@@ -151,8 +155,7 @@ def summarize_with_gemini(video_title: str, video_url: str) -> Optional[str]:
   "places": ["黒かつ亭", "ラーメン小金太"],
   "items": ["黒豚とんかつ", "鹿児島ラーメン"],
   "recommend": "地元食材を使った名店が並び、観光と食を両立できる。",
-  "mood": "美味しそう",
-  "geo": "不明"
+  "mood": "美味しそう"
 }}
 ---
 

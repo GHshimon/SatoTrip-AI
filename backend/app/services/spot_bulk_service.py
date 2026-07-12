@@ -384,6 +384,45 @@ def bulk_add_spots_by_prefecture(
         "geo_filled_count": import_result.get("geo_filled_count", 0),
     }
 
+    # 検証3値（verified / needs_review / rejected）の内訳を集計する。
+    # 取り込み層（import_spots_from_youtube_data）が verification_status を付与する。
+    # 戻り値に内訳カウントがあればそれを優先し、無ければ今回対象スポットを
+    # DBに問い合わせて verification_status を数える（docs/design/SPOT_FIELD_SPEC.md §7）。
+    # 取り込み層の戻り値キーは verified / needs_review / rejected。
+    # rejected は DB に保存されない（設計書 §5）ため、戻り値の値のみが正となる。
+    verified_count = import_result.get("verified")
+    needs_review_count = import_result.get("needs_review")
+    rejected_count = import_result.get("rejected")
+    if verified_count is None and needs_review_count is None and rejected_count is None:
+        verified_count = 0
+        needs_review_count = 0
+        rejected_count = 0
+        spot_ids_for_count = import_result.get("spot_ids") or []
+        if isinstance(spot_ids_for_count, list) and spot_ids_for_count:
+            try:
+                from app.models.spot import Spot
+                from sqlalchemy import func as sa_func
+                # 同期DBクエリ（本関数は同期のため asyncio.to_thread は不要）
+                rows = (
+                    db.query(Spot.verification_status, sa_func.count(Spot.id))
+                    .filter(Spot.id.in_(spot_ids_for_count))
+                    .group_by(Spot.verification_status)
+                    .all()
+                )
+                status_counts = {str(sv): cnt for sv, cnt in rows}
+                verified_count = status_counts.get("verified", 0)
+                needs_review_count = status_counts.get("needs_review", 0)
+                rejected_count = status_counts.get("rejected", 0)
+            except Exception as e:
+                log_error(
+                    "BULK_ADD_VERIFY_COUNT_ERROR",
+                    f"検証内訳集計エラー: {str(e)}",
+                    {"prefecture": prefecture},
+                )
+    result["verified_count"] = verified_count
+    result["needs_review_count"] = needs_review_count
+    result["rejected_count"] = rejected_count
+
     places_search_count = result.get("places_search_count", 0) or 0
     places_hit_count = result.get("places_hit_count", 0) or 0
     if places_search_count > 0:

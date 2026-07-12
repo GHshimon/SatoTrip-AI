@@ -79,6 +79,12 @@ class Settings(BaseSettings):
     PLACES_REGION: str = "jp"
     PLACES_PHOTO_MAX_WIDTH_PX: int = 800
 
+    # スポット検証の3値判定しきい値（docs/design/SPOT_FIELD_SPEC.md §5）
+    # matched_score >= AUTO_PASS で自動合格(verified)、>= REVIEW で要人手(needs_review)、
+    # それ未満は自動棄却(rejected)。運用しながら調整する。
+    SPOT_VERIFY_AUTO_PASS_SCORE: float = 0.75
+    SPOT_VERIFY_REVIEW_SCORE: float = 0.50
+
     # データ収集機能の有効/無効
     # True: データ収集機能を有効にする
     # False: データ収集機能を無効にする（デフォルト）

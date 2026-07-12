@@ -45,17 +45,45 @@ def create_spot(db: Session, spot_data: dict) -> Spot:
     return spot
 
 
+def _apply_public_visibility_filter(query):
+    """公開スポットのみに絞り込む共通フィルタ
+
+    - verification_status は 'verified' と 'unverified' のみ公開する。
+      'unverified' は既存データ移行の経過措置（移行完了後は 'verified' のみに
+      絞る想定）。'needs_review' / 'rejected' は非公開。
+    - business_status が 'CLOSED_PERMANENTLY'（恒久閉業）のスポットは除外する。
+      未取得（NULL）や一時休業はここでは除外しない。
+    """
+    query = query.filter(Spot.verification_status.in_(("verified", "unverified")))
+    query = query.filter(
+        or_(
+            Spot.business_status.is_(None),
+            Spot.business_status != "CLOSED_PERMANENTLY",
+        )
+    )
+    return query
+
+
 def get_spots(
     db: Session,
     area: Optional[str] = None,
     category: Optional[str] = None,
     keyword: Optional[str] = None,
     skip: int = 0,
-    limit: int = 100
+    limit: int = 100,
+    include_unverified: bool = False
 ) -> List[Spot]:
-    """スポット一覧を取得（フィルタリング対応）"""
+    """スポット一覧を取得（フィルタリング対応）
+
+    include_unverified=True のときのみ公開フィルタを外し全件対象にする
+    （管理者用）。デフォルトは公開挙動（検証済み・閉業除外）。
+    """
     query = db.query(Spot)
-    
+
+    # 公開クエリは未検証・閉業を除外（管理者は include_unverified で解除）
+    if not include_unverified:
+        query = _apply_public_visibility_filter(query)
+
     if area:
         query = query.filter(Spot.area.contains(area))
     if category:
@@ -76,9 +104,21 @@ def get_spot(db: Session, spot_id: str) -> Optional[Spot]:
     return db.query(Spot).filter(Spot.id == spot_id).first()
 
 
-def get_spots_by_area(db: Session, area: str, skip: int = 0, limit: int = 100) -> List[Spot]:
-    """エリア別スポット取得"""
-    return db.query(Spot).filter(
+def get_spots_by_area(
+    db: Session,
+    area: str,
+    skip: int = 0,
+    limit: int = 100,
+    include_unverified: bool = False
+) -> List[Spot]:
+    """エリア別スポット取得
+
+    include_unverified=True のときのみ公開フィルタを外す（管理者用）。
+    """
+    query = db.query(Spot)
+    if not include_unverified:
+        query = _apply_public_visibility_filter(query)
+    return query.filter(
         Spot.area.contains(area)
     ).offset(skip).limit(limit).all()
 
@@ -153,7 +193,8 @@ def get_spots_for_plan(
     tags = map_themes_to_tags(themes)
     
     # エリアでフィルタリング
-    query = db.query(Spot).filter(Spot.area.contains(area))
+    # プランには未検証・閉業スポットを出さないため、常に公開フィルタを適用する。
+    query = _apply_public_visibility_filter(db.query(Spot)).filter(Spot.area.contains(area))
     
     # タグでフィルタリング（JSON配列内の検索）
     if tags:

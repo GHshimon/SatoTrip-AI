@@ -31,8 +31,30 @@ from app.services.spot_bulk_service import bulk_add_spots_by_prefecture
 from app.services.bulk_job_service import create_job, get_job, run_bulk_add_job
 from app.config import settings
 from fastapi import Body
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from app.utils.jwt_manager import verify_token
 
 router = APIRouter(prefix="/api/spots", tags=["spots"])
+
+# 一覧系エンドポイントは未ログインでも閲覧できるため、認証は任意扱いにする。
+# トークンがあり管理者のときだけ include_unverified を許可する用途に使う。
+_optional_security = HTTPBearer(auto_error=False)
+
+
+async def get_optional_current_user(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_optional_security),
+    db: Session = Depends(get_db),
+) -> Optional[User]:
+    """トークンがあればユーザーを返し、無ければ None（認証必須にしない）"""
+    if not credentials:
+        return None
+    is_valid, payload = verify_token(credentials.credentials)
+    if not is_valid or not payload:
+        return None
+    user = db.query(User).filter(User.id == payload.get("user_id")).first()
+    if not user or not user.is_active:
+        return None
+    return user
 
 
 @router.get("", response_model=List[SpotResponse])
@@ -42,10 +64,17 @@ async def list_spots(
     keyword: Optional[str] = Query(None, description="キーワード検索"),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
+    include_unverified: bool = Query(False, description="未検証・閉業も含める（管理者のみ有効）"),
+    current_user: Optional[User] = Depends(get_optional_current_user),
     db: Session = Depends(get_db)
 ):
-    """スポット一覧取得（フィルタリング対応）"""
-    spots = get_spots(db, area, category, keyword, skip, limit)
+    """スポット一覧取得（フィルタリング対応）
+
+    include_unverified は管理者のときのみ有効。非管理者が付けても無視して
+    公開フィルタ（検証済み・閉業除外）を維持する。
+    """
+    allow_unverified = bool(include_unverified) and bool(current_user) and current_user.role == "admin"
+    spots = get_spots(db, area, category, keyword, skip, limit, include_unverified=allow_unverified)
     return spots
 
 
@@ -104,10 +133,16 @@ async def get_spots_by_area_endpoint(
     area: str,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
+    include_unverified: bool = Query(False, description="未検証・閉業も含める（管理者のみ有効）"),
+    current_user: Optional[User] = Depends(get_optional_current_user),
     db: Session = Depends(get_db)
 ):
-    """エリア別スポット取得"""
-    spots = get_spots_by_area(db, area, skip, limit)
+    """エリア別スポット取得
+
+    include_unverified は管理者のときのみ有効（非管理者は公開フィルタを維持）。
+    """
+    allow_unverified = bool(include_unverified) and bool(current_user) and current_user.role == "admin"
+    spots = get_spots_by_area(db, area, skip, limit, include_unverified=allow_unverified)
     return spots
 
 
@@ -135,19 +170,20 @@ async def research_spot(
                 detail=f"リサーチに失敗しました: {research_result.get('error') if research_result else 'No result'}"
             )
             
-        # 更新用データを準備
-        update_data = SpotUpdate(
-            description=research_result.get("description"),
-            area=research_result.get("area"),
-            category=research_result.get("category"),
-            duration_minutes=research_result.get("duration_minutes"),
-            price=research_result.get("price"),
-            image=research_result.get("image"),
-            rating=research_result.get("rating"),
-            # tagsはリストなので扱い注意（ここでは上書きする）
-            # tags=research_result.get("tags") 
-        )
-        
+        # AI出力で上書きしてよいのは非事実系のみ（description / category /
+        # duration_minutes / tags）。price / image / rating / area / address 等の
+        # 事実項目は一次ソース（Places）限定のため、AI値では上書きしない
+        # （docs/design/SPOT_FIELD_SPEC.md §4 / SPOT_DATA_QUALITY.md §3.4）。
+        update_data: dict = {}
+        for key in ("description", "category", "duration_minutes", "tags"):
+            value = research_result.get(key)
+            if value is not None:
+                update_data[key] = value
+
+        # description をAIで採用したときは出所を 'ai' として記録する
+        if update_data.get("description"):
+            update_data["description_source"] = "ai"
+
         updated_spot = update_spot(db, spot_id, update_data)
         return updated_spot
         
@@ -156,6 +192,49 @@ async def research_spot(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"リサーチ処理エラー: {str(e)}"
         )
+
+
+@router.put("/{spot_id}/verification", response_model=SpotResponse)
+async def update_spot_verification(
+    spot_id: str,
+    payload: dict = Body(..., description='{"status": "verified"|"rejected"|"needs_review"}'),
+    current_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db),
+):
+    """スポットの検証ステータスを変更（管理者のみ）
+
+    レビューキューでの承認/棄却操作に使う。'/{spot_id}/verification' は2階層の
+    サブパスのため、単一階層の '/{spot_id}'（GET/PUT）とはパスマッチが衝突しない。
+    """
+    from datetime import datetime, timezone
+
+    new_status = (payload or {}).get("status")
+    allowed_statuses = ("verified", "rejected", "needs_review")
+    if new_status not in allowed_statuses:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"status は {allowed_statuses} のいずれかを指定してください",
+        )
+
+    spot = get_spot(db, spot_id)
+    if not spot:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="スポットが見つかりません",
+        )
+
+    spot.verification_status = new_status
+    if new_status == "verified":
+        # 承認時は照合成功日時として現在時刻を記録
+        spot.verified_at = datetime.now(timezone.utc)
+        spot.rejected_reason = None
+    elif new_status == "rejected":
+        # 管理者による手動棄却
+        spot.rejected_reason = "admin"
+
+    db.commit()
+    db.refresh(spot)
+    return spot
 
 
 @router.get("/config/search-keywords", status_code=status.HTTP_200_OK)

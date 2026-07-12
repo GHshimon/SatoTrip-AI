@@ -254,7 +254,7 @@ export const AdminSpots: React.FC = () => {
     area: '',
     category: 'Culture',
     image: '',
-    rating: 0,
+    rating: null,
     price: undefined,
     durationMinutes: 60,
     location: undefined
@@ -619,7 +619,8 @@ export const AdminSpots: React.FC = () => {
         area: createForm.area || '',
         category: createForm.category || 'Culture',
         image: createForm.image || '',
-        rating: createForm.rating || 0,
+        // 未取得は null のまま送る（0埋めしない）
+        rating: createForm.rating ?? null,
         price: createForm.price,
         duration_minutes: createForm.durationMinutes || 60,
       };
@@ -740,7 +741,7 @@ export const AdminSpots: React.FC = () => {
       (spot.description || '').replace(/"/g, '""'),
       spot.area || '',
       spot.category || '',
-      spot.rating || 0,
+      spot.rating ?? '',
       spot.price || '',
       spot.durationMinutes || 0,
       spot.image || '',
@@ -1039,11 +1040,38 @@ export const AdminSpots: React.FC = () => {
                       <h3 className="font-bold text-sm mb-1 line-clamp-1">{spot.name}</h3>
                       <div className="flex justify-between items-center mb-2">
                         <span className="text-xs text-primary font-bold bg-primary/5 px-2 py-0.5 rounded">{spot.category}</span>
-                        <div className="flex items-center text-xs text-yellow-500 font-bold">
-                          <span className="material-symbols-outlined text-sm">star</span>
-                          {spot.rating}
-                        </div>
+                        {spot.rating != null ? (
+                          <div className="flex items-center text-xs text-yellow-500 font-bold" title="Googleの評価">
+                            <span className="material-symbols-outlined text-sm">star</span>
+                            {spot.rating}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-text-muted">-</span>
+                        )}
                       </div>
+                      {spot.verificationStatus && (
+                        <div className="mb-2">
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                              spot.verificationStatus === 'verified'
+                                ? 'bg-green-100 text-green-700'
+                                : spot.verificationStatus === 'needs_review'
+                                ? 'bg-yellow-100 text-yellow-700'
+                                : spot.verificationStatus === 'rejected'
+                                ? 'bg-red-100 text-red-700'
+                                : 'bg-gray-100 text-text-muted'
+                            }`}
+                          >
+                            {spot.verificationStatus === 'verified'
+                              ? '検証OK'
+                              : spot.verificationStatus === 'needs_review'
+                              ? '要確認'
+                              : spot.verificationStatus === 'rejected'
+                              ? '除外'
+                              : '未検証'}
+                          </span>
+                        </div>
+                      )}
                       <p className="text-xs text-text-muted line-clamp-2 mb-3 flex-1">{spot.description}</p>
                       <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
                         <a
@@ -1264,6 +1292,13 @@ export const AdminSpots: React.FC = () => {
                   <div className="font-bold mb-2">{bulkProgress.success ? '✅ 処理完了' : '❌ 処理失敗'}</div>
                   <div className="text-sm space-y-1">
                     <div>追加件数: {bulkProgress.imported}件</div>
+                    {(bulkProgress.verified_count != null ||
+                      bulkProgress.needs_review_count != null ||
+                      bulkProgress.rejected_count != null) && (
+                      <div>
+                        検証OK {bulkProgress.verified_count ?? 0}件 / 要確認 {bulkProgress.needs_review_count ?? 0}件 / 除外 {bulkProgress.rejected_count ?? 0}件
+                      </div>
+                    )}
                     <div>処理キーワード: {bulkProgress.processed_keywords}/{bulkProgress.total_keywords}</div>
                     <div>取得動画数: {bulkProgress.total_videos}件</div>
                     {bulkProgress.quota_exceeded && (
