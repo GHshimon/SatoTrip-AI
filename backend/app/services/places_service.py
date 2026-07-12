@@ -51,14 +51,17 @@ _LEGACY_PHOTO_URL_RE = re.compile(
     r"^https://places\.googleapis\.com/v1/(places/[^/?#]+/photos/[^/?#]+)/media"
 )
 
+# Text Search は候補の「選定」だけに使う。候補スコアリング（_build_candidate_score）は
+# displayName / formattedAddress / types のみ参照するため、rating・priceLevel は不要。
+# この2つは Enterprise ティアのフィールドで、含めると Text Search 全体が Enterprise 課金
+# （無料枠 月1,000回）になる。外すと残りは Pro ティア（無料枠 月5,000回）に収まり、
+# Enterprise 枠を Place Details 専用にできる（品質は不変。評価/価格は Details から取得）。
 _TEXT_SEARCH_FIELD_MASK = ",".join([
     "places.id",
     "places.displayName",
     "places.formattedAddress",
     "places.location",
     "places.types",
-    "places.rating",
-    "places.priceLevel",
 ])
 
 _DETAILS_FIELD_MASK = ",".join([

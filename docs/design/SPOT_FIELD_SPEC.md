@@ -39,8 +39,8 @@
 | name | [S] | Places正規名（照合合格時） | `displayName.text` / Pro | — | 照合スコア合格時はPlaces正規名を採用（現状はAI名を優先＝要反転） |
 | description | [A] | AI（主観表現のみ） | （`editorialSummary`は不採用: 課金増＋日本スパース） | 「AIが生成した参考情報です…」＋公式リンク | プロンプトからNGワード禁止（§4）。`description_source='ai'`記録 |
 | area | [S/A] | Places住所から機械導出（AIは分類補助） | `formattedAddress`から導出 | — | AI area は分類ヒントのみ、保存はPlaces由来 |
-| address | [S] | Places | `formattedAddress`,`shortFormattedAddress` / Essentials | — | **AI住所の書込を停止**（enrich ~88行）。未取得はnull |
-| lat/lng | [S] | Places→(補完)geocoding | `location` / Essentials | — | 県境界(`_PREFECTURE_BOUNDS`)内チェック。AI推定座標は保存しない |
+| address | [S] | Places | `formattedAddress`,`shortFormattedAddress` / Pro | — | **AI住所の書込を停止**（enrich ~88行）。未取得はnull |
+| lat/lng | [S] | Places→(補完)geocoding | `location` / Pro | — | 県境界(`_PREFECTURE_BOUNDS`)内チェック。AI推定座標は保存しない |
 | category | [A] | AI＋型マッピング | `primaryType`(Pro,無料)で裏取り可 | — | 非事実系。継続 |
 | duration_minutes | [A] | AI/カテゴリ別ヒューリスティック | （Places非公開） | 「所要時間の目安（AI推定）・約N分」 | 一律60廃止しカテゴリ別既定へ。表示に「約」「目安」 |
 | tags | [A] | AI | `types`は裏取りのみ | — | 非事実系。継続 |
@@ -104,7 +104,7 @@ _DETAILS_FIELD_MASK += ",businessStatus,primaryType,primaryTypeDisplayName,curre
 
 - `enrich_spot_with_places` / `get_place_details` の戻り値に上記を含め、`business_status` / `opening_hours(periods)` / `rating_count` / `price_level` / `price_range_*` をSpotへ保存。
 - **再検証用の最小マスク関数を分離**: `get_place_business_status(place_id)` は field mask `id,businessStatus` のみ（Proティア＝定期ジョブのコストを1桁下げる。`SPOT_DATA_QUALITY.md §3.5`）。
-- Text Search マスクは選別用途に縮小（`places.id,displayName,formattedAddress,location,primaryType`）し、`rating`/`priceLevel` はDetails側へ寄せてTextSearchを低ティアに保つ。
+- Text Search マスクは選別用途に縮小（`places.id,displayName,formattedAddress,location,types`）し、`rating`/`priceLevel`（Enterprise ティアのフィールド）を外す。これで Text Search は **Enterprise → Pro** に下がる（無料枠 月1,000回→月5,000回）。候補スコアリング（`_build_candidate_score`）は displayName/formattedAddress/types のみ参照するため品質影響なし。評価・価格は place_id 確定後の Details から取得する。実装済み。
 
 ---
 

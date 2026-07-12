@@ -61,7 +61,16 @@ def format_places_for_prompt(places: List[Dict[str, Any]], include_details: bool
             line_parts.append(f": {items_str}")
         
         formatted.append(" ".join(line_parts))
-        
+
+        # 営業時間・定休日はスケジュールの実行可能性に直結するため、
+        # include_details に依らず（DBスポットでも）常に表示する。
+        opening_hours = p.get("opening_hours")
+        if isinstance(opening_hours, dict):
+            weekday_desc = opening_hours.get("weekdayDescriptions")
+            if isinstance(weekday_desc, list) and weekday_desc:
+                hours_str = " / ".join(str(d) for d in weekday_desc)
+                formatted.append(f"  営業時間: {hours_str[:200]}")
+
         # 詳細情報（include_details=True の場合のみ）
         if include_details:
             details = []
@@ -104,6 +113,7 @@ def build_plan_generation_prompt(
     transportation: Optional[str] = None,
     preferences: Optional[str] = None,
     spot_distances: Optional[List[Dict[str, Any]]] = None,
+    check_in_date: Optional[str] = None,
 ) -> str:
     """
     プラン生成用プロンプトを構築（品質向上版）
@@ -189,7 +199,23 @@ def build_plan_generation_prompt(
         requirements.append(f"- 希望・要望: {preferences}")
     
     requirements_text = "\n".join(requirements)
-    
+
+    # 3.5. 旅行日の曜日情報（営業時間・定休日との突き合わせ用）
+    #      営業時間は曜日別なので、旅行日の曜日が分かって初めて「定休日を避ける」判断ができる。
+    travel_dates_text = ""
+    if check_in_date:
+        try:
+            from datetime import datetime as _dt, timedelta as _td
+            _weekday_jp = ["月", "火", "水", "木", "金", "土", "日"]
+            _start = _dt.strptime(check_in_date, "%Y-%m-%d")
+            _parts = []
+            for _i in range(days):
+                _d = _start + _td(days=_i)
+                _parts.append(f"{_i + 1}日目: {_d.strftime('%Y-%m-%d')}（{_weekday_jp[_d.weekday()]}）")
+            travel_dates_text = "\n【旅行日（曜日）】\n" + " / ".join(_parts) + "\n"
+        except ValueError:
+            travel_dates_text = ""
+
     # 4. 指示セクション（明確で実行可能）
     time_constraint = f"開始時間 {start_time} から終了時間 {end_time} の間でスケジュールを組んでください" if start_time and end_time else "1日の活動時間を適切に配分してください"
     
@@ -216,6 +242,7 @@ def build_plan_generation_prompt(
 5. **時間制約**: {time_constraint}
 6. **交通手段**: {transport_instruction}
 7. **禁止事項**: データベースに登録されていないスポットを生成したり、提案したりしないでください{transportation_consistency_note}
+8. **営業時間・定休日の考慮（重要）**: 各スポットに「営業時間」が記載されている場合は、必ずその曜日の営業時間内に訪問時刻（startTime）を割り当ててください。旅行日の曜日がそのスポットの定休日（該当曜日が「定休日」「休業」「Closed」等）にあたる場合は、そのスポットをその日には割り当てず、営業している別の日に回すか、営業している別のスポットで代替してください。営業時間の記載が無いスポットは通常どおり扱って構いません。
 
 【滞在時間の設定】
 - データベースに「滞在時間: 約XX分」と記載されている場合は、その値を優先的に使用してください
@@ -290,7 +317,7 @@ def build_plan_generation_prompt(
 ```
 """
     
-    return basic_info + db_info + distance_info + instructions + output_format
+    return basic_info + db_info + distance_info + travel_dates_text + instructions + output_format
 
 
 def parse_duration_to_minutes(duration_str: str) -> int:
@@ -406,6 +433,7 @@ def generate_plan(
     transportation: Optional[str] = None,
     preferences: Optional[str] = None,
     spot_distances: Optional[List[Dict[str, Any]]] = None,
+    check_in_date: Optional[str] = None,
     use_fallback: bool = True,
 ) -> Optional[Dict[str, Any]]:
     """
@@ -443,9 +471,10 @@ def generate_plan(
         end_time=end_time,
         transportation=transportation,
         preferences=preferences,
-        spot_distances=spot_distances
+        spot_distances=spot_distances,
+        check_in_date=check_in_date,
     )
-    
+
     try:
         @retry_on_error(max_retries=3, delay=1.0, backoff=2.0)
         def _generate():

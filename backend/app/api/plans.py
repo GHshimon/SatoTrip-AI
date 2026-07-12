@@ -626,6 +626,8 @@ async def generate_ai_plan(
             "rating": spot.rating,
             "image": spot.image or "",
             "tags": spot.tags or [],
+            # 営業時間（Places由来）。プラン生成で定休日・営業時間を考慮させるために渡す。
+            "opening_hours": spot.opening_hours,
             "location": {
                 "lat": spot.latitude or 0.0,
                 "lng": spot.longitude or 0.0
@@ -670,7 +672,8 @@ async def generate_ai_plan(
         end_time=request.end_time,
         transportation=request.transportation,
         preferences=request.preferences,
-        spot_distances=spot_distances
+        spot_distances=spot_distances,
+        check_in_date=request.check_in_date,
     )
     
     if not generated_plan:
