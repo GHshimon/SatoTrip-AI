@@ -165,6 +165,10 @@ class BulkAddResponse(BaseModel):
     verified_count: Optional[int] = None
     needs_review_count: Optional[int] = None
     rejected_count: Optional[int] = None
+    # 月次 Enterprise 予算ガード（Place Details の今月使用量・安全上限・打ち切りフラグ）
+    details_budget_used: Optional[int] = None
+    details_budget_soft_limit: Optional[int] = None
+    details_budget_exhausted: Optional[bool] = None
     error: Optional[str] = None
     job_id: Optional[str] = None
     job_status: Optional[str] = None

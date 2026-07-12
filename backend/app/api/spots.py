@@ -113,6 +113,19 @@ async def get_spot_photo(
     )
 
 
+@router.get("/places-usage", status_code=status.HTTP_200_OK)
+async def get_places_usage(
+    current_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db),
+):
+    """今月の Place Details 使用量と月次予算状態を返す（管理者のみ）。
+
+    単一階層パスのため、'/{spot_id}' より前に定義してマッチの衝突を避ける。
+    """
+    from app.services.places_usage_service import check_details_budget
+    return check_details_budget(db)
+
+
 @router.get("/{spot_id}", response_model=SpotResponse)
 async def get_spot_detail(
     spot_id: str,
@@ -421,6 +434,30 @@ async def bulk_add_spots_by_prefecture_endpoint(
 ):
     """都道府県名で複数キーワード検索してまとめてスポットを追加（管理者のみ）"""
     try:
+        # 月次 Enterprise 予算ガード: 安全上限に達していたら、ジョブを投入せず即座に停止を返す
+        # （無料枠超過の課金事故を防ぐ。async/sync 両経路の前段でチェック）。
+        from app.services.places_usage_service import check_details_budget
+        _budget = check_details_budget(db)
+        if _budget["exhausted"]:
+            return BulkAddResponse(
+                success=False,
+                imported=0,
+                errors=0,
+                skipped=0,
+                total_keywords=0,
+                quota_exceeded=False,
+                processed_keywords=0,
+                failed_keywords=0,
+                total_videos=0,
+                details_budget_used=_budget["used"],
+                details_budget_soft_limit=_budget["soft_limit"],
+                details_budget_exhausted=True,
+                error=(
+                    f"今月のPlaces無料枠(Place Details)の安全上限に達したため、一括追加を停止しました"
+                    f"（{_budget['used']}/{_budget['soft_limit']}回）。無料枠は翌月1日にリセットされます。"
+                ),
+            )
+
         run_async = bool(request.run_async) if request.run_async is not None else settings.BULK_ADD_ENABLE_BACKGROUND_JOBS
         if settings.BULK_ADD_ENABLE_BACKGROUND_JOBS and run_async:
             job_id = create_job({

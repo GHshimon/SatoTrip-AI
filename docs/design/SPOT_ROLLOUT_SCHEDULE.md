@@ -40,7 +40,11 @@
 2. 完了後、`BulkAddResponse` の内訳を確認: `verified_count / needs_review_count / rejected_count` と
    `places_search_count / places_hit_count / details_call_count`。
 3. `needs_review` は管理画面の承認キュー（Phase 2 で実装予定）で人手確認 → verified 化。
-4. **月内の累計 `details_call_count` が 900 を超えたら、その月は打ち切り**（Enterprise枠1,000の安全マージン）。翌月1日再開。
+4. **月内の累計 Place Details 呼び出しが 900 に達したら自動で打ち切り**（Enterprise枠1,000の安全マージン）。
+   これは**コード側で強制**される（月次予算ガード。`places_usage_service` が Details 呼び出しを月単位で
+   永続集計し、`bulk_add_spots_by_prefecture` は上限到達時に新規実行を停止する）。閾値は
+   `PLACES_MONTHLY_DETAILS_SOFT_LIMIT`。今月の使用量は管理APIの `GET /api/spots/places-usage` で確認可。
+   無料枠は翌月1日にリセット（＝カウンタも新しい年月キーで自動リセット）。
 
 ## 週次の分散例（第1月）
 

@@ -43,6 +43,35 @@ def bulk_add_spots_by_prefecture(
     Returns:
         処理結果の辞書（imported, errors, skipped, total_keywords, quota_exceeded等）
     """
+    # 月次 Enterprise 予算ガード: 今月の Place Details 呼び出しが安全閾値に達していたら、
+    # 無料枠超過の課金事故を防ぐため新規の一括追加を実行せず即座に打ち切る。
+    from app.services.places_usage_service import check_details_budget, add_details_usage
+    budget = check_details_budget(db)
+    if budget["exhausted"]:
+        return {
+            "success": False,
+            "imported": 0,
+            "created": 0,
+            "merged": 0,
+            "errors": 0,
+            "skipped": 0,
+            "verified_count": 0,
+            "needs_review_count": 0,
+            "rejected_count": 0,
+            "total_keywords": 0,
+            "quota_exceeded": False,
+            "processed_keywords": 0,
+            "failed_keywords": 0,
+            "total_videos": 0,
+            "details_budget_used": budget["used"],
+            "details_budget_soft_limit": budget["soft_limit"],
+            "details_budget_exhausted": True,
+            "error": (
+                f"今月のPlaces無料枠(Place Details)の安全上限に達したため、一括追加を停止しました"
+                f"（{budget['used']}/{budget['soft_limit']}回）。無料枠は翌月1日にリセットされます。"
+            ),
+        }
+
     # デバッグログセッションを開始
     session_id = init_debug_log(
         prefecture=prefecture,
@@ -52,8 +81,8 @@ def bulk_add_spots_by_prefecture(
         add_location=add_location,
         category=category
     )
-    
-    
+
+
     target_keywords = None
     if category:
         # カテゴリに応じた検索キーワードを生成
@@ -390,6 +419,14 @@ def bulk_add_spots_by_prefecture(
     result["verified_count"] = import_result.get("verified", 0)
     result["needs_review_count"] = import_result.get("needs_review", 0)
     result["rejected_count"] = import_result.get("rejected", 0)
+
+    # 月次 Enterprise 予算ガード: 今回消費した Place Details 呼び出しを月次累計に加算し、
+    # 更新後の予算状態をレスポンスに載せる（管理画面で残量を確認できるように）。
+    add_details_usage(db, result.get("details_call_count", 0) or 0)
+    _budget_after = check_details_budget(db)
+    result["details_budget_used"] = _budget_after["used"]
+    result["details_budget_soft_limit"] = _budget_after["soft_limit"]
+    result["details_budget_exhausted"] = _budget_after["exhausted"]
 
     places_search_count = result.get("places_search_count", 0) or 0
     places_hit_count = result.get("places_hit_count", 0) or 0

@@ -40,6 +40,9 @@ def get_db() -> Session:
 
 def init_db():
     """データベースを初期化（テーブル作成）"""
+    # 全モデルを metadata に登録してから create_all する。
+    # （関数内 import: database → models の循環 import を避けるため）
+    import app.models  # noqa: F401
     Base.metadata.create_all(bind=engine)
     _apply_simple_migrations()
 

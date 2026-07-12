@@ -151,6 +151,10 @@ export interface BulkAddResponse {
   verified_count?: number;
   needs_review_count?: number;
   rejected_count?: number;
+  // 月次 Enterprise 予算ガード（Place Details）
+  details_budget_used?: number;
+  details_budget_soft_limit?: number;
+  details_budget_exhausted?: boolean;
   places_search_count?: number;
   places_hit_count?: number;
   places_miss_count?: number;
@@ -183,6 +187,20 @@ export async function bulkAddSpotsByPrefecture(
   };
   const response = await apiClient.post<BulkAddResponse>('/api/spots/bulk-add-by-prefecture', request);
   return response;
+}
+
+export interface PlacesUsage {
+  used: number;
+  soft_limit: number;
+  budget: number;
+  remaining: number;
+  exhausted: boolean;
+  month: string;
+}
+
+/** 今月の Place Details 使用量と月次予算状態を取得（管理者のみ） */
+export async function getPlacesUsage(): Promise<PlacesUsage> {
+  return apiClient.get<PlacesUsage>('/api/spots/places-usage');
 }
 
 export async function getBulkAddJobStatus(jobId: string): Promise<BulkAddResponse> {

@@ -85,6 +85,12 @@ class Settings(BaseSettings):
     SPOT_VERIFY_AUTO_PASS_SCORE: float = 0.75
     SPOT_VERIFY_REVIEW_SCORE: float = 0.50
 
+    # 月次 Enterprise 予算ガード（Place Details の無料枠。docs/design/SPOT_ROLLOUT_SCHEDULE.md）
+    # Place Details は Enterprise ティア（無料枠 月1,000回）。月内の Details 呼び出し累計が
+    # SOFT_LIMIT に達したら新規の一括追加を自動停止し、無料枠超過の課金事故を防ぐ。
+    PLACES_MONTHLY_DETAILS_BUDGET: int = 1000     # Enterprise 無料枠/月
+    PLACES_MONTHLY_DETAILS_SOFT_LIMIT: int = 900  # 新規一括追加を止める安全閾値（100回の余裕）
+
     # データ収集機能の有効/無効
     # True: データ収集機能を有効にする
     # False: データ収集機能を無効にする（デフォルト）

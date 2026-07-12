@@ -1301,6 +1301,12 @@ export const AdminSpots: React.FC = () => {
                     )}
                     <div>処理キーワード: {bulkProgress.processed_keywords}/{bulkProgress.total_keywords}</div>
                     <div>取得動画数: {bulkProgress.total_videos}件</div>
+                    {bulkProgress.details_budget_used != null && bulkProgress.details_budget_soft_limit != null && (
+                      <div className={bulkProgress.details_budget_exhausted ? 'text-orange-600 font-bold' : ''}>
+                        今月のPlaces使用: {bulkProgress.details_budget_used}/{bulkProgress.details_budget_soft_limit}回
+                        {bulkProgress.details_budget_exhausted && '（上限到達・翌月1日にリセット）'}
+                      </div>
+                    )}
                     {bulkProgress.quota_exceeded && (
                       <div className="text-orange-600 font-bold">⚠️ YouTube APIのクォータ制限に達しました</div>
                     )}
