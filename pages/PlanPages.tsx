@@ -6,6 +6,7 @@ import { AppConfig } from '../config';
 import * as planApi from '../src/api/plans';
 import * as hotelApi from '../src/api/hotels';
 import * as spotApi from '../src/api/spots';
+import { warmupBackend } from '../src/api/health';
 import { SpotAddModal } from '../components/SpotAddModal';
 import WeavingLoader from '../components/design/WeavingLoader';
 import RouteCrest from '../components/RouteCrest';
@@ -745,6 +746,12 @@ export const CreatePlan: React.FC<{ onNavigate: (path: string) => void }> = ({ o
   const [pendingSpots, setPendingSpots] = useState<Spot[]>([]);
   const [activeRegion, setActiveRegion] = useState(regions[1].id); // Default to Kanto
   const [draftRestored, setDraftRestored] = useState(false);
+
+  // 作成画面を開いた時点でバックエンドを起こしておく（コールドスタート対策）。
+  // ユーザーが入力している間に起動が完了し、送信時は生成だけを待てばよい。
+  useEffect(() => {
+    warmupBackend();
+  }, []);
 
   // 下書きの復元 → ランディングから渡された趣味(?hobby=)の追加 → お気に入りスポット
   // の順に初期化する。どの経路でも「もう一度入力し直す」ことが起きないようにする。
