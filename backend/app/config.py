@@ -79,6 +79,18 @@ class Settings(BaseSettings):
     PLACES_REGION: str = "jp"
     PLACES_PHOTO_MAX_WIDTH_PX: int = 800
 
+    # スポット検証の3値判定しきい値（docs/design/SPOT_FIELD_SPEC.md §5）
+    # matched_score >= AUTO_PASS で自動合格(verified)、>= REVIEW で要人手(needs_review)、
+    # それ未満は自動棄却(rejected)。運用しながら調整する。
+    SPOT_VERIFY_AUTO_PASS_SCORE: float = 0.75
+    SPOT_VERIFY_REVIEW_SCORE: float = 0.50
+
+    # 月次 Enterprise 予算ガード（Place Details の無料枠。docs/design/SPOT_ROLLOUT_SCHEDULE.md）
+    # Place Details は Enterprise ティア（無料枠 月1,000回）。月内の Details 呼び出し累計が
+    # SOFT_LIMIT に達したら新規の一括追加を自動停止し、無料枠超過の課金事故を防ぐ。
+    PLACES_MONTHLY_DETAILS_BUDGET: int = 1000     # Enterprise 無料枠/月
+    PLACES_MONTHLY_DETAILS_SOFT_LIMIT: int = 900  # 新規一括追加を止める安全閾値（100回の余裕）
+
     # データ収集機能の有効/無効
     # True: データ収集機能を有効にする
     # False: データ収集機能を無効にする（デフォルト）
@@ -103,7 +115,14 @@ class Settings(BaseSettings):
     # 開発環境: http://localhost:3000,http://localhost:5173
     # 本番環境: 実際のフロントエンドURL
     CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173"
-    
+
+    # CORS 許可オリジンの正規表現（静的リストに加えてマッチしたオリジンも許可）。
+    # Vercel のプレビューデプロイはコミットごとにサブドメインが変わり静的リストで許可できないため、
+    # この正規表現で「自分の Vercel 組織配下の sato-trip-ai-* プレビュー」だけを許可する。
+    # 組織スラッグに限定しているため任意オリジンは通らない（第三者は同名サブドメインを作れない）。
+    # 別プロジェクト/組織へ移す場合は環境変数 CORS_ORIGIN_REGEX で上書きする。空文字で無効化。
+    CORS_ORIGIN_REGEX: str = r"^https://sato-trip-ai-[a-z0-9-]+-ghshimons-projects\.vercel\.app$"
+
     # 実行環境
     # development: 開発環境（デバッグ情報を表示）
     # production: 本番環境（セキュリティ強化）

@@ -1,6 +1,8 @@
 
 export interface User {
   id: string;
+  /** ログインID（退会時の確認入力などに使用。モックデータには無い場合がある） */
+  username?: string;
   name: string;
   avatar: string;
   role: 'user' | 'admin';
@@ -61,9 +63,26 @@ export interface Spot {
   address?: string;
   category: SpotCategory;
   durationMinutes: number;
-  rating: number;
+  /** Places由来の評価のみ。自社評価は持たないため未取得は null（0埋め禁止） */
+  rating: number | null;
+  /** userRatingCount。rating とセットでのみ表示 */
+  ratingCount?: number | null;
   image: string;
   price?: number;
+  /** priceLevel 序数 0..4（金額ではない）。表示は価格帯記号へ変換 */
+  priceLevel?: number | null;
+  /** priceRange.startPrice（円）。min/max が揃った時のみ概算表示 */
+  priceRangeMin?: number | null;
+  /** priceRange.endPrice（円） */
+  priceRangeMax?: number | null;
+  /** OPERATIONAL|CLOSED_TEMPORARILY|CLOSED_PERMANENTLY */
+  businessStatus?: string | null;
+  /** regularOpeningHours（曜日別説明と periods） */
+  openingHours?: { weekdayDescriptions?: string[]; periods?: any[] } | null;
+  /** 紹介文の出所（'ai'|'manual'|'places'）。'ai' の時は免責ラベルを表示 */
+  descriptionSource?: string | null;
+  /** verified|needs_review|rejected|unverified */
+  verificationStatus?: string | null;
   tags?: string[]; // Added for AI/SNS tags
   location?: {
     lat: number;

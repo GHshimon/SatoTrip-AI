@@ -14,6 +14,85 @@ import { FolderTree } from '../components/FolderTree';
 import * as folderApi from '../src/api/folders';
 import { PlanFolder } from '../types';
 
+// ── スポット表示ラベル（docs/design/SPOT_FIELD_SPEC.md §6 準拠）─────────────
+
+/** priceLevel(0..4序数) を価格帯記号へ変換。金額は断定しない */
+const formatPriceLevel = (level?: number | null): string | null => {
+  if (level == null) return null;
+  if (level <= 0) return 'FREE';
+  return '¥'.repeat(Math.min(level, 4));
+};
+
+/**
+ * Google由来の評価表示。rating が null の時は何も描画しない（自社評価は持たないため）。
+ * 件数があれば併記し「Googleの評価 ★4.2（123件）」形式で示す。
+ */
+const SpotRating: React.FC<{ spot: Spot; className?: string }> = ({ spot, className }) => {
+  if (spot.rating == null) return null;
+  return (
+    <span className={`inline-flex items-center gap-1 ${className || ''}`} title="Googleの評価。SatoTrip独自の評価ではありません">
+      <span className="material-symbols-outlined text-yellow-400 fill text-sm">star</span>
+      <span className="font-bold text-text-light">{spot.rating.toFixed(1)}</span>
+      {spot.ratingCount != null && (
+        <span className="text-xs text-text-muted">（{spot.ratingCount}件）</span>
+      )}
+    </span>
+  );
+};
+
+/**
+ * スポットの一次情報（価格帯・営業時間・公式サイト導線・AI紹介文ラベル）。
+ * 値がある項目だけ描画し、断定表現を避けて公式確認を促す。
+ */
+const SpotFactInfo: React.FC<{ spot: Spot }> = ({ spot }) => {
+  const priceBand = formatPriceLevel(spot.priceLevel);
+  const hasPriceRange = spot.priceRangeMin != null && spot.priceRangeMax != null;
+  const weekdayDescriptions = spot.openingHours?.weekdayDescriptions;
+  const hasHours = Array.isArray(weekdayDescriptions) && weekdayDescriptions.length > 0;
+  const hasAny = priceBand || hasHours || spot.website || spot.descriptionSource === 'ai';
+  if (!hasAny) return null;
+  return (
+    <div className="mt-3 space-y-2 text-xs text-text-muted" onClick={(e) => e.stopPropagation()}>
+      {priceBand && (
+        <div>
+          価格帯の目安：<span className="font-bold text-text-light">{priceBand}</span>（Googleの価格水準による）
+          {hasPriceRange && (
+            <span className="ml-1">／概算 {spot.priceRangeMin!.toLocaleString()}〜{spot.priceRangeMax!.toLocaleString()}円（Google）</span>
+          )}
+        </div>
+      )}
+      {hasHours && (
+        <details className="rounded-md bg-gray-50 px-2 py-1">
+          <summary className="cursor-pointer font-medium text-text-light">営業時間</summary>
+          <ul className="mt-1 space-y-0.5">
+            {weekdayDescriptions!.map((d, i) => <li key={i}>{d}</li>)}
+          </ul>
+          <p className="mt-1 text-text-muted">営業時間・定休日は変動する場合があります。訪問前に公式情報でご確認ください。</p>
+        </details>
+      )}
+      {spot.website && (
+        <div>
+          <a
+            href={spot.website}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary font-medium hover:underline inline-flex items-center gap-1"
+          >
+            <span className="material-symbols-outlined text-sm">open_in_new</span>
+            公式サイト／予約はこちら
+          </a>
+          <p className="mt-1">予約可否・駐車場の有無は各施設へ直接ご確認ください。</p>
+        </div>
+      )}
+      {spot.descriptionSource === 'ai' && (
+        <p className="text-[11px] text-text-muted">
+          この紹介文はAIが生成した参考情報です。正確性・最新情報は保証されません。詳細は公式サイトでご確認ください。
+        </p>
+      )}
+    </div>
+  );
+};
+
 export const PlanList: React.FC<{ onNavigate: (path: string) => void }> = ({ onNavigate }) => {
   const [plansList, setPlansList] = useState<Plan[]>([]);
   const [folders, setFolders] = useState<PlanFolder[]>([]);
@@ -529,7 +608,7 @@ export const PrefectureSpots: React.FC<{ area: string; onNavigate: (path: string
     if (sortBy === 'name') {
       result.sort((a, b) => a.name.localeCompare(b.name, 'ja'));
     } else {
-      result.sort((a, b) => b.rating - a.rating);
+      result.sort((a, b) => (b.rating ?? -1) - (a.rating ?? -1));
     }
 
     return result;
@@ -656,6 +735,8 @@ export const PrefectureSpots: React.FC<{ area: string; onNavigate: (path: string
         ))}
       </div>
 
+      <p className="text-xs text-text-muted mb-4">※ 星評価はGoogleの評価であり、SatoTrip独自の評価ではありません。</p>
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         {filteredSpots.length > 0 ? (
           filteredSpots.map(spot => {
@@ -690,10 +771,11 @@ export const PrefectureSpots: React.FC<{ area: string; onNavigate: (path: string
                 <div className="p-4">
                   <p className="text-sm text-text-muted mb-3 line-clamp-2">{spot.description}</p>
                   <div className="flex items-center gap-4 text-sm text-text-muted">
-                    <div className="flex items-center gap-1"><span className="material-symbols-outlined text-yellow-400 fill">star</span> <span className="text-text-light font-bold">{spot.rating}</span></div>
+                    <SpotRating spot={spot} />
                     <div className="flex items-center gap-1"><span className="material-symbols-outlined">schedule</span> {spot.durationMinutes}分</div>
                     <span className="px-2 py-0.5 bg-primary/10 text-primary text-xs rounded-full font-medium">{spot.category}</span>
                   </div>
+                  <SpotFactInfo spot={spot} />
                 </div>
               </div>
             );
@@ -782,7 +864,7 @@ export const FavoriteSpots: React.FC<{ onNavigate: (path: string) => void }> = (
     });
 
     if (sortBy === 'rating') {
-      result.sort((a, b) => b.rating - a.rating);
+      result.sort((a, b) => (b.rating ?? -1) - (a.rating ?? -1));
     } else {
       result.sort((a, b) => a.name.localeCompare(b.name, 'ja'));
     }
@@ -994,11 +1076,14 @@ export const FavoriteSpots: React.FC<{ onNavigate: (path: string) => void }> = (
               <div className="p-5 flex-1 flex flex-col">
                 <div className="flex justify-between items-start mb-2">
                   <h3 className="text-lg font-bold text-text-light line-clamp-1">{spot.name}</h3>
-                  <div className="flex items-center gap-1 text-yellow-500 text-sm font-bold bg-yellow-50 px-2 py-1 rounded-md">
-                    <span className="material-symbols-outlined text-sm fill">star</span> {spot.rating}
-                  </div>
+                  {spot.rating != null && (
+                    <div className="flex items-center gap-1 text-sm font-bold bg-yellow-50 px-2 py-1 rounded-md">
+                      <SpotRating spot={spot} />
+                    </div>
+                  )}
                 </div>
                 <p className="text-sm text-text-muted mb-4 line-clamp-2 flex-1">{spot.description}</p>
+                <SpotFactInfo spot={spot} />
 
                 <div className="flex items-center justify-between mt-auto pt-4 border-t border-gray-50">
                   <div className="flex items-center gap-2 text-xs font-medium text-primary bg-primary/5 px-3 py-1 rounded-full">

@@ -26,17 +26,28 @@ class SpotBase(BaseModel):
     phone: Optional[str] = None
     website: Optional[str] = None
     source_videos: Optional[List[Dict[str, Any]]] = None
-    
+
+    # 出所・検証・事実データ（docs/design/SPOT_FIELD_SPEC.md §1）
+    source: Optional[str] = None
+    verification_status: Optional[str] = None
+    business_status: Optional[str] = None
+    rating_count: Optional[int] = None
+    price_level: Optional[int] = None          # 価格帯の序数 0..4（金額ではない）
+    price_range_min: Optional[int] = None       # priceRange 実額（円）。揃った時のみ
+    price_range_max: Optional[int] = None
+    opening_hours: Optional[Dict[str, Any]] = None  # Places regularOpeningHours
+    description_source: Optional[str] = None
+
     @field_validator('tags', mode='before')
     @classmethod
     def validate_tags(cls, v: Any) -> Optional[List[Dict[str, Any]]]:
         """タグを構造化タグ（辞書リスト）に変換"""
         if v is None:
             return None
-        
+
         if isinstance(v, list) and len(v) == 0:
             return None
-        
+
         # 文字列リストまたは構造化タグリストを正規化
         normalized = normalize_tags(v)
         return tags_to_dict_list(normalized)
@@ -150,6 +161,14 @@ class BulkAddResponse(BaseModel):
     gemini_enrich_call_count: Optional[int] = None
     geo_filled_count: Optional[int] = None
     places_hit_rate: Optional[float] = None
+    # 検証3値の内訳（docs/design/SPOT_FIELD_SPEC.md §7）
+    verified_count: Optional[int] = None
+    needs_review_count: Optional[int] = None
+    rejected_count: Optional[int] = None
+    # 月次 Enterprise 予算ガード（Place Details の今月使用量・安全上限・打ち切りフラグ）
+    details_budget_used: Optional[int] = None
+    details_budget_soft_limit: Optional[int] = None
+    details_budget_exhausted: Optional[bool] = None
     error: Optional[str] = None
     job_id: Optional[str] = None
     job_status: Optional[str] = None

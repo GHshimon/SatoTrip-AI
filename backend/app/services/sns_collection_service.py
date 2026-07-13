@@ -57,11 +57,14 @@ def summarize_sns_article_with_gemini(article_title: str, article_link: str) -> 
     
     Returns:
         構造化JSON形式の要約テキスト
+
+    注意: 入力は記事タイトル文字列のみ。得られる店名・エリアは未検証の候補であり、
+    緯度経度などの事実は生成させない（座標は後段の Places / geocoding を正とし、AI 推定は保存しない）。
     """
     if not settings.GEMINI_API_KEY:
         log_error("GEMINI_API_KEY_NOT_SET", "GEMINI_API_KEYが設定されていません")
         return None
-    
+
     prompt = f"""
 以下のニュース記事から、観光地・グルメ情報として構造的に要約してください。
 
@@ -76,7 +79,7 @@ def summarize_sns_article_with_gemini(article_title: str, article_link: str) -> 
 ■ 登場する商品・料理名・名物（記事内で紹介されたもの）
 ■ おすすめポイント（100文字以内、旅行者目線）
 ■ 雰囲気（例: 癒やし / 活気 / 美味しそう / 歴史的）
-■ 推定緯度経度（分からなければ "不明" と記載）
+※ 緯度経度・住所などの事実情報は推測して出力しないでください（別途一次ソースから取得します）。
 ■ JSON出力例:
 {{
   "theme": "観光",
@@ -84,8 +87,7 @@ def summarize_sns_article_with_gemini(article_title: str, article_link: str) -> 
   "places": ["桜島", "城山公園"],
   "items": ["観光スポット", "展望台"],
   "recommend": "鹿児島のシンボル桜島と市内を一望できる展望台。",
-  "mood": "絶景",
-  "geo": "不明"
+  "mood": "絶景"
 }}
 ---
 

@@ -157,10 +157,13 @@ class ApiClient {
   }
 
   /**
-   * DELETEリクエスト
+   * DELETEリクエスト（退会など確認情報が必要な場合はボディを渡せる）
    */
-  async delete<T>(endpoint: string, timeoutMs?: number): Promise<T> {
-    return this.request<T>(endpoint, { method: 'DELETE' }, timeoutMs);
+  async delete<T>(endpoint: string, data?: any, timeoutMs?: number): Promise<T> {
+    return this.request<T>(endpoint, {
+      method: 'DELETE',
+      body: data ? JSON.stringify(data) : undefined,
+    }, timeoutMs);
   }
 
   /**

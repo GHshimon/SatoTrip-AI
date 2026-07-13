@@ -191,7 +191,8 @@ def add_hotels_to_plan_spots(
                         "area": hotel_spot.area or area,
                         "category": "Hotel",
                         "durationMinutes": 0,
-                        "rating": hotel_spot.rating or 4.0,
+                        # rating は一次ソース（Places）由来のみ。捏造値は入れず None を許容する。
+                        "rating": hotel_spot.rating,
                         "image": hotel_spot.image or "",
                         "price": hotel_spot.price,
                         "tags": hotel_spot.tags or [],
@@ -247,7 +248,8 @@ def add_hotels_to_plan_spots(
                         "area": hotel_spot.area or area,
                         "category": "Hotel",
                         "durationMinutes": 0,  # 宿泊施設は滞在時間を計算しない
-                        "rating": hotel_spot.rating or 4.0,
+                        # rating は一次ソース（Places）由来のみ。捏造値は入れず None を許容する。
+                        "rating": hotel_spot.rating,
                         "image": hotel_spot.image or "",
                         "price": hotel_spot.price,
                         "tags": hotel_spot.tags or [],
@@ -313,7 +315,8 @@ def convert_generated_spots_to_plan_spots(
                 "area": matched_spot.area or generated_plan.get("area", request.destination),
                 "category": matched_spot.category or spot_data.get("category", "Culture"),
                 "durationMinutes": matched_spot.duration_minutes or spot_data.get("durationMinutes", 60),
-                "rating": matched_spot.rating or 4.5,
+                # rating は一次ソース（Places）由来のみ。捏造値は入れず None を許容する。
+                "rating": matched_spot.rating,
                 "image": matched_spot.image or "",
                 "tags": matched_spot.tags or spot_data.get("tags", []),
                 "location": {
@@ -619,9 +622,12 @@ async def generate_ai_plan(
             "area": spot.area or "",
             "category": spot.category or "Culture",
             "durationMinutes": spot.duration_minutes or 60,
-            "rating": spot.rating or 4.0,
+            # rating は一次ソース（Places）由来のみ。捏造値は入れず None を許容する。
+            "rating": spot.rating,
             "image": spot.image or "",
             "tags": spot.tags or [],
+            # 営業時間（Places由来）。プラン生成で定休日・営業時間を考慮させるために渡す。
+            "opening_hours": spot.opening_hours,
             "location": {
                 "lat": spot.latitude or 0.0,
                 "lng": spot.longitude or 0.0
@@ -666,7 +672,8 @@ async def generate_ai_plan(
         end_time=request.end_time,
         transportation=request.transportation,
         preferences=request.preferences,
-        spot_distances=spot_distances
+        spot_distances=spot_distances,
+        check_in_date=request.check_in_date,
     )
     
     if not generated_plan:

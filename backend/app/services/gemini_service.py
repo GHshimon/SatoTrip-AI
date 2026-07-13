@@ -61,7 +61,16 @@ def format_places_for_prompt(places: List[Dict[str, Any]], include_details: bool
             line_parts.append(f": {items_str}")
         
         formatted.append(" ".join(line_parts))
-        
+
+        # 営業時間・定休日はスケジュールの実行可能性に直結するため、
+        # include_details に依らず（DBスポットでも）常に表示する。
+        opening_hours = p.get("opening_hours")
+        if isinstance(opening_hours, dict):
+            weekday_desc = opening_hours.get("weekdayDescriptions")
+            if isinstance(weekday_desc, list) and weekday_desc:
+                hours_str = " / ".join(str(d) for d in weekday_desc)
+                formatted.append(f"  営業時間: {hours_str[:200]}")
+
         # 詳細情報（include_details=True の場合のみ）
         if include_details:
             details = []
@@ -104,6 +113,7 @@ def build_plan_generation_prompt(
     transportation: Optional[str] = None,
     preferences: Optional[str] = None,
     spot_distances: Optional[List[Dict[str, Any]]] = None,
+    check_in_date: Optional[str] = None,
 ) -> str:
     """
     プラン生成用プロンプトを構築（品質向上版）
@@ -189,7 +199,23 @@ def build_plan_generation_prompt(
         requirements.append(f"- 希望・要望: {preferences}")
     
     requirements_text = "\n".join(requirements)
-    
+
+    # 3.5. 旅行日の曜日情報（営業時間・定休日との突き合わせ用）
+    #      営業時間は曜日別なので、旅行日の曜日が分かって初めて「定休日を避ける」判断ができる。
+    travel_dates_text = ""
+    if check_in_date:
+        try:
+            from datetime import datetime as _dt, timedelta as _td
+            _weekday_jp = ["月", "火", "水", "木", "金", "土", "日"]
+            _start = _dt.strptime(check_in_date, "%Y-%m-%d")
+            _parts = []
+            for _i in range(days):
+                _d = _start + _td(days=_i)
+                _parts.append(f"{_i + 1}日目: {_d.strftime('%Y-%m-%d')}（{_weekday_jp[_d.weekday()]}）")
+            travel_dates_text = "\n【旅行日（曜日）】\n" + " / ".join(_parts) + "\n"
+        except ValueError:
+            travel_dates_text = ""
+
     # 4. 指示セクション（明確で実行可能）
     time_constraint = f"開始時間 {start_time} から終了時間 {end_time} の間でスケジュールを組んでください" if start_time and end_time else "1日の活動時間を適切に配分してください"
     
@@ -216,6 +242,7 @@ def build_plan_generation_prompt(
 5. **時間制約**: {time_constraint}
 6. **交通手段**: {transport_instruction}
 7. **禁止事項**: データベースに登録されていないスポットを生成したり、提案したりしないでください{transportation_consistency_note}
+8. **営業時間・定休日の考慮（重要）**: 各スポットに「営業時間」が記載されている場合は、必ずその曜日の営業時間内に訪問時刻（startTime）を割り当ててください。旅行日の曜日がそのスポットの定休日（該当曜日が「定休日」「休業」「Closed」等）にあたる場合は、そのスポットをその日には割り当てず、営業している別の日に回すか、営業している別のスポットで代替してください。営業時間の記載が無いスポットは通常どおり扱って構いません。
 
 【滞在時間の設定】
 - データベースに「滞在時間: 約XX分」と記載されている場合は、その値を優先的に使用してください
@@ -290,7 +317,7 @@ def build_plan_generation_prompt(
 ```
 """
     
-    return basic_info + db_info + distance_info + instructions + output_format
+    return basic_info + db_info + distance_info + travel_dates_text + instructions + output_format
 
 
 def parse_duration_to_minutes(duration_str: str) -> int:
@@ -406,6 +433,7 @@ def generate_plan(
     transportation: Optional[str] = None,
     preferences: Optional[str] = None,
     spot_distances: Optional[List[Dict[str, Any]]] = None,
+    check_in_date: Optional[str] = None,
     use_fallback: bool = True,
 ) -> Optional[Dict[str, Any]]:
     """
@@ -443,9 +471,10 @@ def generate_plan(
         end_time=end_time,
         transportation=transportation,
         preferences=preferences,
-        spot_distances=spot_distances
+        spot_distances=spot_distances,
+        check_in_date=check_in_date,
     )
-    
+
     try:
         @retry_on_error(max_retries=3, delay=1.0, backoff=2.0)
         def _generate():
@@ -543,7 +572,8 @@ def research_spot_info(
         prefecture: 既知の都道府県名
         
     Returns:
-        JSON形式のスポット詳細情報 (name, area, address, category, description, price, etc.)
+        JSON形式の非事実系スポット情報 (name, area(分類補助), category, description, duration_minutes, tags)
+        住所・価格・座標・評価などの事実項目は生成しない（一次ソース限定）。
         エラー時は {"error": True, "error_type": "...", "message": "..."} 形式の辞書を返す
     """
     if not settings.GEMINI_API_KEY:
@@ -563,11 +593,19 @@ def research_spot_info(
     
     prompt = f"""
 あなたは日本の観光スポットに詳しいAIアシスタントです。
-以下の観光スポットについて、データベースに登録するための詳細情報を生成してください。
-正確な情報が不明な場合は、一般的な傾向や推定値（妥当な範囲）を用いて補完してください。
+以下の観光スポットについて、データベースに登録するための**非事実系の紹介情報**（分類・紹介文・所要時間の目安・タグ）を生成してください。
+住所・座標・価格・評価・電話・営業時間などの**検証できる事実は生成しないでください**（これらは別途一次ソースから取得します）。
+不明な項目は推測で埋めず、null または空にしてください。推測で事実を作らないでください。
 
 対象スポット: {spot_name}
 {context_block}このコンテキストに合致する**実在の店舗・施設**を特定したうえで情報を記述してください。同名異店舗が存在する場合はコンテキストに最も合致するものを採用します。
+
+【description に書いてはいけないこと】
+- 受賞歴・格付け（「ミシュラン」「◯◯賞」「三ツ星」など）
+- 最上級・序列（「日本一」「No.1」「行列必至」など）
+- 由来・歴史の断定（「名物」「元祖」「発祥」「創業◯年」など）
+- 数値的事実（来場者数・席数など）、営業時間・料金・予約可否
+- 検証できない事実は書かず、主観的な雰囲気紹介（「落ち着いた雰囲気」「散策が楽しめる」等）に留めてください。
 
 【滞在時間の算出方法】
 以下のルールに従って、適切な滞在時間（分単位）を算出してください：
@@ -596,13 +634,10 @@ def research_spot_info(
 ```json
 {{
   "name": "{spot_name}",
-  "area": "都道府県＋市区町村（例: 鹿児島県鹿児島市、京都府京都市東山区）",
-  "address": "実在する番地まで含む住所（推定でも可、不明な場合は空文字 \"\"）",
+  "area": "都道府県＋市区町村（分類の補助用。例: 鹿児島県鹿児島市、京都府京都市東山区。不明なら空文字 \"\"）",
   "category": "History" | "Nature" | "Food" | "Shopping" | "Art" | "Relax" | "Culture" の中から最も適切なものを1つ,
-  "description": "そのスポット固有の魅力や特徴を100〜200文字程度で魅力的に記述してください。同名・同ジャンルの他店舗の特徴は混ぜないでください。",
-  "price": 参考価格（大人の入場料や平均予算、円単位、数値のみ、不明な場合は0）,
-  "image": "https://placehold.co/600x400?text={spot_name}" (このまま出力),
-  "duration_minutes": 標準滞在時間（分単位、数値。上記のルールに従って算出してください。最小15分、最大480分）,
+  "description": "そのスポット固有の魅力や雰囲気を100〜200文字程度で主観的に記述してください。同名・同ジャンルの他店舗の特徴は混ぜないでください。検証できない事実（受賞・最上級・由来・数値・営業/料金）は書かないでください。",
+  "duration_minutes": 標準滞在時間の目安（分単位、数値。上記のルールに従って算出してください。最小15分、最大480分）,
   "tags": ["タグ1", "タグ2", "タグ3"]
 }}
 ```
@@ -615,7 +650,7 @@ def research_spot_info(
 
 【推測の扱い】
 - 実在が確認できないスポットや、特定が困難な短い名前の場合は description を「推定情報を含みます。」で始めてください
-- 住所が分からなくても、description / category / tags は妥当な推定で埋めてください
+- description / category / tags / duration_minutes 以外の事実項目は生成せず、不明な項目は null または空にしてください
 """
 
     try:

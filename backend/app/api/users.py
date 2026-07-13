@@ -1,6 +1,8 @@
 """
 ユーザー管理APIエンドポイント
 """
+import asyncio
+
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.orm import Session
 from typing import List
@@ -13,8 +15,9 @@ from app.schemas.user import (
     UserPreferencesResponse,
     UserPreferencesUpdate,
     PasswordChangeRequest,
+    AccountDeleteRequest,
 )
-from app.services.user_service import update_user
+from app.services.user_service import update_user, delete_user_account
 from app.services.plan_service import get_user_plans
 from app.services import preferences_service
 from app.schemas.plan import PlanResponse
@@ -128,4 +131,34 @@ async def change_my_password(
     current_user.hashed_password = hash_password(payload.new_password)
     db.commit()
     return {"message": "パスワードを変更しました"}
+
+
+@router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_current_user(
+    payload: AccountDeleteRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """退会（アカウント削除）。関連データも全て削除する"""
+    if payload.confirm != current_user.username:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="退会するには、確認のためユーザー名を正確に入力してください"
+        )
+    if current_user.role == "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="管理者アカウントは退会できません。先に管理者権限を移譲してください"
+        )
+    try:
+        # Stripe解約（同期SDK）を含むため、イベントループを塞がないようスレッドへ逃がす
+        await asyncio.to_thread(delete_user_account, db, current_user)
+    except Exception:
+        # ロールバックはサービス側で実施済み（念のためここでも安全側に倒す）
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="退会処理に失敗しました。時間をおいて再度お試しください"
+        )
+    return None
 

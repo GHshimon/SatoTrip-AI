@@ -30,6 +30,43 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
+/**
+ * スポットの一次情報（営業時間・公式サイト導線）をタイムライン詳細に控えめに表示する。
+ * docs/design/SPOT_FIELD_SPEC.md §6 準拠。値がある項目のみ描画。
+ * ページ冒頭にAI免責を常設しているため、営業時間の注記文は重複させない。
+ */
+const SpotTimelineInfo: React.FC<{ spot: Spot }> = ({ spot }) => {
+  const weekdayDescriptions = spot.openingHours?.weekdayDescriptions;
+  const hasHours = Array.isArray(weekdayDescriptions) && weekdayDescriptions.length > 0;
+  if (!hasHours && !spot.website) return null;
+  return (
+    <div className="mt-2 space-y-1 text-xs text-text-muted">
+      {hasHours && (
+        <details className="rounded-md bg-gray-50 px-2 py-1">
+          <summary className="cursor-pointer font-medium text-text-light">営業時間</summary>
+          <ul className="mt-1 space-y-0.5">
+            {weekdayDescriptions!.map((d, i) => <li key={i}>{d}</li>)}
+          </ul>
+        </details>
+      )}
+      {spot.website && (
+        <div>
+          <a
+            href={spot.website}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary font-medium hover:underline inline-flex items-center gap-1"
+          >
+            <span className="material-symbols-outlined text-sm">open_in_new</span>
+            公式サイト／予約はこちら
+          </a>
+          <p className="mt-1">予約可否・駐車場の有無は各施設へ直接ご確認ください。</p>
+        </div>
+      )}
+    </div>
+  );
+};
+
 // 47 Prefectures Data grouped by Region
 const regions = [
   {
@@ -261,6 +298,7 @@ const SortableSpotItem: React.FC<SortableSpotItemProps> = ({
                 </span>
               )}
             </div>
+            <SpotTimelineInfo spot={spot.spot} />
           </div>
           <div className="w-20 h-20 rounded-lg overflow-hidden shadow-sm flex-shrink-0 hidden sm:block">
             <img src={spot.spot.image} alt="" className="w-full h-full object-cover" />
@@ -1971,6 +2009,7 @@ export const PlanDetail: React.FC<{ planId: string; onNavigate: (path: string) =
                           </span>
                         )}
                       </div>
+                      <SpotTimelineInfo spot={pSpot.spot} />
                     </div>
                     <div className="w-20 h-20 rounded-lg overflow-hidden shadow-sm flex-shrink-0 hidden sm:block">
                       <img src={pSpot.spot.image} alt="" className="w-full h-full object-cover" />
