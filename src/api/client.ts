@@ -107,7 +107,7 @@ class ApiClient {
       // タイムアウト（AbortController による中断）
       if (error?.name === 'AbortError') {
         throw {
-          detail: 'リクエストがタイムアウトしました。時間をおいて再度お試しください。',
+          detail: '処理がタイムアウトしました。初回はサーバーの起動に時間がかかることがあります。少し待ってから、もう一度お試しください。',
           status: NETWORK_ERROR_STATUS,
         } as ApiError;
       }
