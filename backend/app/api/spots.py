@@ -174,6 +174,67 @@ async def get_collection_readiness(
     }
 
 
+@router.get("/tags", response_model=TagResponse, status_code=status.HTTP_200_OK)
+async def get_tags(
+    db: Session = Depends(get_db),
+    category: Optional[str] = Query(None, description="カテゴリでフィルタ")
+):
+    """利用可能なタグ一覧を取得（統計情報付き）"""
+    from app.models.spot import Spot
+    
+    # 全スポットからタグを収集
+    spots = db.query(Spot).filter(Spot.tags.isnot(None)).all()
+    
+    tag_counter = Counter()
+    tag_categories = {}
+    tag_normalized = {}
+    
+    for spot in spots:
+        if not spot.tags:
+            continue
+        
+        # タグを正規化
+        from app.utils.tag_normalizer import dict_list_to_tags
+        tags = dict_list_to_tags(spot.tags)
+        
+        for tag in tags:
+            tag_value = tag.value
+            tag_counter[tag_value] += 1
+            
+            if tag.category:
+                tag_categories[tag_value] = tag.category.value
+            tag_normalized[tag_value] = tag.normalized
+    
+    # タグ統計を作成
+    tag_stats_list = []
+    for tag_value, count in tag_counter.most_common():
+        # カテゴリフィルタ
+        if category and tag_categories.get(tag_value) != category:
+            continue
+        
+        tag_stats_list.append(TagStats(
+            value=tag_value,
+            count=count,
+            category=tag_categories.get(tag_value),
+            normalized=tag_normalized.get(tag_value, tag_value)
+        ))
+    
+    # カテゴリ一覧を取得
+    categories_data = load_tag_categories()
+    categories_dict = {}
+    for cat_key, cat_info in categories_data.get("categories", {}).items():
+        categories_dict[cat_key] = {
+            "name": cat_info.get("name", ""),
+            "description": cat_info.get("description", "")
+        }
+    
+    return TagResponse(
+        tags=tag_stats_list,
+        total=len(tag_stats_list),
+        categories=categories_dict
+    )
+
+
 @router.get("/{spot_id}", response_model=SpotResponse)
 async def get_spot_detail(
     spot_id: str,
@@ -603,67 +664,6 @@ async def get_bulk_add_job_status(
         job_id=job_id,
         job_status=job_status,
         error=None,
-    )
-
-
-@router.get("/tags", response_model=TagResponse, status_code=status.HTTP_200_OK)
-async def get_tags(
-    db: Session = Depends(get_db),
-    category: Optional[str] = Query(None, description="カテゴリでフィルタ")
-):
-    """利用可能なタグ一覧を取得（統計情報付き）"""
-    from app.models.spot import Spot
-    
-    # 全スポットからタグを収集
-    spots = db.query(Spot).filter(Spot.tags.isnot(None)).all()
-    
-    tag_counter = Counter()
-    tag_categories = {}
-    tag_normalized = {}
-    
-    for spot in spots:
-        if not spot.tags:
-            continue
-        
-        # タグを正規化
-        from app.utils.tag_normalizer import dict_list_to_tags
-        tags = dict_list_to_tags(spot.tags)
-        
-        for tag in tags:
-            tag_value = tag.value
-            tag_counter[tag_value] += 1
-            
-            if tag.category:
-                tag_categories[tag_value] = tag.category.value
-            tag_normalized[tag_value] = tag.normalized
-    
-    # タグ統計を作成
-    tag_stats_list = []
-    for tag_value, count in tag_counter.most_common():
-        # カテゴリフィルタ
-        if category and tag_categories.get(tag_value) != category:
-            continue
-        
-        tag_stats_list.append(TagStats(
-            value=tag_value,
-            count=count,
-            category=tag_categories.get(tag_value),
-            normalized=tag_normalized.get(tag_value, tag_value)
-        ))
-    
-    # カテゴリ一覧を取得
-    categories_data = load_tag_categories()
-    categories_dict = {}
-    for cat_key, cat_info in categories_data.get("categories", {}).items():
-        categories_dict[cat_key] = {
-            "name": cat_info.get("name", ""),
-            "description": cat_info.get("description", "")
-        }
-    
-    return TagResponse(
-        tags=tag_stats_list,
-        total=len(tag_stats_list),
-        categories=categories_dict
     )
 
 
