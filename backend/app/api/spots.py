@@ -126,6 +126,115 @@ async def get_places_usage(
     return check_details_budget(db)
 
 
+@router.get("/collection-readiness", status_code=status.HTTP_200_OK)
+async def get_collection_readiness(
+    current_user: User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db),
+):
+    """スポット収集の前提条件が整っているかを返す（管理者のみ）。
+
+    キーの値そのものは返さず、設定済みか（真偽）だけを返す。
+    ready=True なら一括追加を実行できる状態。単一階層パスのため '/{spot_id}' より前に定義。
+    """
+    from sqlalchemy import func as sa_func
+    from app.services.places_usage_service import check_details_budget
+
+    budget = check_details_budget(db)
+    total_spots = db.query(sa_func.count(Spot.id)).scalar() or 0
+    # 検証ステータス別の件数（収集の質を把握する用）
+    status_rows = db.query(Spot.verification_status, sa_func.count(Spot.id)).group_by(
+        Spot.verification_status
+    ).all()
+    by_status = {str(s or "unverified"): int(c) for s, c in status_rows}
+
+    checks = {
+        "gemini_configured": bool(settings.GEMINI_API_KEY),
+        "youtube_configured": bool(settings.YOUTUBE_API_KEY),
+        "places_configured": bool(settings.GOOGLE_MAPS_API_KEY),
+        "spot_enrich_with_places": bool(settings.SPOT_ENRICH_WITH_PLACES),
+        "spot_enrich_with_gemini": bool(settings.SPOT_ENRICH_WITH_GEMINI),
+        "data_collection_enabled": bool(settings.DATA_COLLECTION_ENABLED),
+        "details_budget_ok": not budget["exhausted"],
+    }
+    # 一括追加(/bulk-add-by-prefecture)に必須なのは gemini/youtube/places と予算のみ
+    ready = (
+        checks["gemini_configured"]
+        and checks["youtube_configured"]
+        and checks["places_configured"]
+        and checks["details_budget_ok"]
+    )
+    missing = [k for k in ("gemini_configured", "youtube_configured", "places_configured") if not checks[k]]
+    return {
+        "ready": ready,
+        "missing": missing,  # 未設定の必須キー（設定すべきもの）
+        "checks": checks,
+        "details_budget": budget,
+        "total_spots": total_spots,
+        "spots_by_verification_status": by_status,
+    }
+
+
+@router.get("/tags", response_model=TagResponse, status_code=status.HTTP_200_OK)
+async def get_tags(
+    db: Session = Depends(get_db),
+    category: Optional[str] = Query(None, description="カテゴリでフィルタ")
+):
+    """利用可能なタグ一覧を取得（統計情報付き）"""
+    from app.models.spot import Spot
+    
+    # 全スポットからタグを収集
+    spots = db.query(Spot).filter(Spot.tags.isnot(None)).all()
+    
+    tag_counter = Counter()
+    tag_categories = {}
+    tag_normalized = {}
+    
+    for spot in spots:
+        if not spot.tags:
+            continue
+        
+        # タグを正規化
+        from app.utils.tag_normalizer import dict_list_to_tags
+        tags = dict_list_to_tags(spot.tags)
+        
+        for tag in tags:
+            tag_value = tag.value
+            tag_counter[tag_value] += 1
+            
+            if tag.category:
+                tag_categories[tag_value] = tag.category.value
+            tag_normalized[tag_value] = tag.normalized
+    
+    # タグ統計を作成
+    tag_stats_list = []
+    for tag_value, count in tag_counter.most_common():
+        # カテゴリフィルタ
+        if category and tag_categories.get(tag_value) != category:
+            continue
+        
+        tag_stats_list.append(TagStats(
+            value=tag_value,
+            count=count,
+            category=tag_categories.get(tag_value),
+            normalized=tag_normalized.get(tag_value, tag_value)
+        ))
+    
+    # カテゴリ一覧を取得
+    categories_data = load_tag_categories()
+    categories_dict = {}
+    for cat_key, cat_info in categories_data.get("categories", {}).items():
+        categories_dict[cat_key] = {
+            "name": cat_info.get("name", ""),
+            "description": cat_info.get("description", "")
+        }
+    
+    return TagResponse(
+        tags=tag_stats_list,
+        total=len(tag_stats_list),
+        categories=categories_dict
+    )
+
+
 @router.get("/{spot_id}", response_model=SpotResponse)
 async def get_spot_detail(
     spot_id: str,
@@ -555,67 +664,6 @@ async def get_bulk_add_job_status(
         job_id=job_id,
         job_status=job_status,
         error=None,
-    )
-
-
-@router.get("/tags", response_model=TagResponse, status_code=status.HTTP_200_OK)
-async def get_tags(
-    db: Session = Depends(get_db),
-    category: Optional[str] = Query(None, description="カテゴリでフィルタ")
-):
-    """利用可能なタグ一覧を取得（統計情報付き）"""
-    from app.models.spot import Spot
-    
-    # 全スポットからタグを収集
-    spots = db.query(Spot).filter(Spot.tags.isnot(None)).all()
-    
-    tag_counter = Counter()
-    tag_categories = {}
-    tag_normalized = {}
-    
-    for spot in spots:
-        if not spot.tags:
-            continue
-        
-        # タグを正規化
-        from app.utils.tag_normalizer import dict_list_to_tags
-        tags = dict_list_to_tags(spot.tags)
-        
-        for tag in tags:
-            tag_value = tag.value
-            tag_counter[tag_value] += 1
-            
-            if tag.category:
-                tag_categories[tag_value] = tag.category.value
-            tag_normalized[tag_value] = tag.normalized
-    
-    # タグ統計を作成
-    tag_stats_list = []
-    for tag_value, count in tag_counter.most_common():
-        # カテゴリフィルタ
-        if category and tag_categories.get(tag_value) != category:
-            continue
-        
-        tag_stats_list.append(TagStats(
-            value=tag_value,
-            count=count,
-            category=tag_categories.get(tag_value),
-            normalized=tag_normalized.get(tag_value, tag_value)
-        ))
-    
-    # カテゴリ一覧を取得
-    categories_data = load_tag_categories()
-    categories_dict = {}
-    for cat_key, cat_info in categories_data.get("categories", {}).items():
-        categories_dict[cat_key] = {
-            "name": cat_info.get("name", ""),
-            "description": cat_info.get("description", "")
-        }
-    
-    return TagResponse(
-        tags=tag_stats_list,
-        total=len(tag_stats_list),
-        categories=categories_dict
     )
 
 

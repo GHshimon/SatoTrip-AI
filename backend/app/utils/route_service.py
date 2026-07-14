@@ -15,6 +15,33 @@ from app.utils.error_handler import log_error
 _route_cache: Dict[str, Tuple[Dict[str, Any], float]] = {}
 _cache_ttl = 3600  # 1時間（秒）
 
+# 交通手段別の平均速度（m/s）。
+# 公開OSRMデモサーバは profile を無視して常に「車」の所要時間を返すため
+# （driving/walking/cycling/transit がすべて同一値）、徒歩・自転車は距離から
+# 現実的な速度で所要時間を再計算する。距離はOSRMの道路距離を流用する。
+_WALK_SPEED_MPS = 1.25   # 約4.5 km/h（信号待ち等を含む実効値）
+_BIKE_SPEED_MPS = 4.0    # 約14.4 km/h
+# 公共交通機関: OSRMに経路が無いため車の所要時間から近似する（ダイヤは考慮しない概算）。
+# 待ち時間・乗換・駅までの徒歩を見込んで係数＋固定オーバーヘッドを加える。
+# 正確なダイヤ考慮は Google Directions transit 等の導入が必要（別課題）。
+_TRANSIT_FACTOR = 1.5
+_TRANSIT_OVERHEAD_S = 15 * 60
+
+
+def _duration_for_mode(profile: str, distance_m: float, car_duration_s: float) -> Tuple[float, str]:
+    """OSRM（実質は車）の距離・所要時間から、交通手段別の現実的な所要時間を返す。
+
+    戻り: (duration_seconds, source)
+    """
+    p = (profile or "driving").lower()
+    if p in ("walking", "foot") and distance_m > 0:
+        return distance_m / _WALK_SPEED_MPS, "osrm+walk_estimate"
+    if p in ("cycling", "bike", "bicycle") and distance_m > 0:
+        return distance_m / _BIKE_SPEED_MPS, "osrm+bike_estimate"
+    if p == "transit":
+        return car_duration_s * _TRANSIT_FACTOR + _TRANSIT_OVERHEAD_S, "osrm+transit_estimate"
+    return car_duration_s, "osrm"
+
 
 def get_route_from_osrm(
     coordinates: List[Tuple[float, float]],
@@ -54,21 +81,24 @@ def get_route_from_osrm(
                 # [[lng, lat], ...] を [[lat, lng], ...] に変換
                 route_coords = [[coord[1], coord[0]] for coord in geometry]
                 
-                # 距離と時間を計算
+                # 距離と時間を計算（duration は OSRM の車の所要時間）
                 distance = 0
                 duration = 0
                 if route.get("legs"):
                     for leg in route["legs"]:
                         distance += leg.get("distance", 0)
                         duration += leg.get("duration", 0)
-                
+
+                # 交通手段別に所要時間を補正（徒歩/自転車は距離から、電車/バスは概算）
+                adj_duration, source = _duration_for_mode(profile, distance, duration)
+
                 return {
                     "geometry": route_coords,
                     "distance_meters": distance,
                     "distance_km": distance / 1000,
-                    "duration_seconds": duration,
-                    "duration_minutes": duration / 60,
-                    "source": "osrm"
+                    "duration_seconds": adj_duration,
+                    "duration_minutes": adj_duration / 60,
+                    "source": source
                 }
     except Exception as e:
         log_error("OSRM_ROUTE_ERROR", f"OSRMルート取得エラー: {str(e)}", {"coordinates_count": len(coordinates)})

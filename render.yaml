@@ -26,3 +26,12 @@ services:
         sync: false # パスワードリセットメール等のリンク先。CORS_ORIGINS の代表1つと同じでよい
       - key: GEMINI_MODEL
         value: gemini-2.5-flash
+      # --- スポット収集（全国拡充）で必要。未設定だと「動くが0件収集」になる ---
+      - key: YOUTUBE_API_KEY
+        sync: false # YouTube Data API v3 のキー。収集の起点（未設定だと動画0件）
+      - key: GOOGLE_MAPS_API_KEY
+        sync: false # Places API(New)のキー。スポットの存在確認・営業時間・評価の取得に必須
+                    # （未設定だと全候補が no_places_hit で棄却され0件）。要API制限（OWNER_TASKS #1）
+      - key: DATA_COLLECTION_ENABLED
+        value: "true" # 旧データ収集API(/api/admin/data-collection/*)を使う場合のみ必要。
+                      # 一括追加(/api/spots/bulk-add-by-prefecture)には不要だが有効化しておく
